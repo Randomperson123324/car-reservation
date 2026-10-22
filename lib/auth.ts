@@ -1,4 +1,6 @@
 import "server-only";
+import { connection } from "next/server";
+import { cache } from "react";
 import { getSupabaseAuth } from "@/lib/supabase";
 
 export type SessionUser = {
@@ -15,11 +17,17 @@ export function safeRedirect(path: unknown) {
   return typeof path === "string" && /^\/(?![/\\])/.test(path) ? path : "/";
 }
 
-export async function getSessionUser(): Promise<SessionUser | null> {
+// Cached per request: the navbar and the page may both ask.
+export const getSessionUser = cache(async function getSessionUser(): Promise<
+  SessionUser | null
+> {
   // Outside the try: while prerendering, reading cookies must be left to
   // suspend rather than be caught as a failure.
   const supabase = await getSupabaseAuth();
   if (!supabase) return null;
+  // Checking the token's expiry reads the clock, which may only happen at
+  // request time, never while prerendering.
+  await connection();
   try {
     const { data } = await supabase.auth.getClaims();
     const claims = data?.claims;
@@ -40,4 +48,4 @@ export async function getSessionUser(): Promise<SessionUser | null> {
     console.error("getSessionUser failed", error);
     return null;
   }
-}
+});

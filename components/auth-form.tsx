@@ -34,12 +34,10 @@ export function AuthForm({
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState(initialError);
-  const [notice, setNotice] = useState("");
   const [pending, startTransition] = useTransition();
 
   function submit() {
     setError("");
-    setNotice("");
     startTransition(async () => {
       const result =
         mode === "login"
@@ -49,7 +47,6 @@ export function AuthForm({
         setError(result.error);
         return;
       }
-      setNotice(result.message);
       setPassword("");
       setMode("login");
     });
@@ -172,18 +169,16 @@ export function AuthForm({
       </div>
 
       <AnimatePresence>
-        {(error || notice) && (
+        {error && (
           <motion.p
-            role={error ? "alert" : "status"}
+            role="alert"
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: "auto", opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
             transition={{ duration: 0.25, ease: EASE }}
-            className={`overflow-hidden text-sm font-semibold ${
-              error ? "text-brand-700" : "text-ink"
-            }`}
+            className="overflow-hidden text-sm font-semibold text-brand-700"
           >
-            <span className="block pt-3">{error || notice}</span>
+            <span className="block pt-3">{error}</span>
           </motion.p>
         )}
       </AnimatePresence>
@@ -201,11 +196,6 @@ export function AuthForm({
         {current.label}
       </button>
 
-      {mode === "register" && (
-        <p className="mt-4 text-center text-sm text-ink-subtle">
-          คุณจะได้รับอีเมลยืนยัน กรุณาตรวจสอบกล่องจดหมายของคุณ
-        </p>
-      )}
     </form>
   );
 }

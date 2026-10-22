@@ -158,6 +158,49 @@ export async function setReservationStatus(
   return { ok: true };
 }
 
+export type BulkResult =
+  { ok: true; changed: number } | { ok: false; error: string };
+
+// Approves or rejects many bookings in one go, under the same rules as one.
+export async function setReservationStatuses(
+  codes: string[],
+  status: AdminDecision,
+): Promise<BulkResult> {
+  const normalized = Array.isArray(codes)
+    ? [
+        ...new Set(
+          codes.map((c) => normalizeCode(typeof c === "string" ? c : "")),
+        ),
+      ]
+    : [];
+  if (
+    normalized.length === 0 ||
+    normalized.length > 500 ||
+    !normalized.every((c) => CODE_RE.test(c)) ||
+    !["approved", "rejected"].includes(status)
+  ) {
+    return { ok: false, error: GENERIC_ERROR };
+  }
+
+  const supabase = await getSupabaseAuth();
+  if (!supabase) return { ok: false, error: NOT_CONFIGURED };
+
+  const { data, error } = await supabase.rpc("set_reservation_statuses", {
+    p_codes: normalized,
+    p_status: status,
+  });
+  if (error) {
+    console.error("setReservationStatuses failed", error);
+    return {
+      ok: false,
+      error:
+        error.code === "42501" ? "คุณไม่มีสิทธิ์ดำเนินการนี้" : GENERIC_ERROR,
+    };
+  }
+  refresh();
+  return { ok: true, changed: typeof data === "number" ? data : 0 };
+}
+
 // A well-formed code that matches nothing and a malformed one both come back
 // as an empty list: either way there is no such booking.
 export async function lookupReservationByCode(

@@ -7,6 +7,7 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
+  X,
 } from "lucide-react";
 import { Collapse } from "@/components/collapse";
 import { EASE } from "@/components/page-transition";
@@ -147,25 +148,31 @@ function Dropdown({
 
 function MonthCalendar({
   today,
+  min = today,
+  max,
   value,
   onSelect,
 }: {
   today: string;
+  // Earliest and latest days that can be picked; from today on by default.
+  min?: string;
+  max?: string;
   value: string;
   onSelect: (date: string) => void;
 }) {
-  const first = parseYearMonth(today);
+  const current = parseYearMonth(today);
+  const first = parseYearMonth(min);
   const [view, setView] = useState<YearMonth>(() =>
     parseYearMonth(value || today),
   );
   const [direction, setDirection] = useState(1);
 
-  const lastIndex = (first.year + YEARS_AHEAD) * 12 + 11;
+  const lastIndex = (current.year + YEARS_AHEAD) * 12 + 11;
   const canGoBack = monthIndex(view) > monthIndex(first);
   const canGoForward = monthIndex(view) < lastIndex;
 
   function show(target: YearMonth) {
-    // Clamp into the bookable range (this month … end of the last year).
+    // Clamp into the pickable range (first month … end of the last year).
     const index = Math.min(
       Math.max(monthIndex(target), monthIndex(first)),
       lastIndex,
@@ -207,10 +214,13 @@ function MonthCalendar({
             label="เลือกปี"
             value={view.year}
             onChange={(year) => show({ year, month: view.month })}
-            options={Array.from({ length: YEARS_AHEAD + 1 }, (_, i) => ({
-              value: first.year + i,
-              label: String(first.year + i + BUDDHIST_ERA_OFFSET),
-            }))}
+            options={Array.from(
+              { length: current.year + YEARS_AHEAD - first.year + 1 },
+              (_, i) => ({
+                value: first.year + i,
+                label: String(first.year + i + BUDDHIST_ERA_OFFSET),
+              }),
+            )}
           />
         </div>
         <div className="flex items-center gap-1">
@@ -225,11 +235,12 @@ function MonthCalendar({
           </button>
           <button
             type="button"
+            disabled={today < min || (!!max && today > max)}
             onClick={() => {
-              show(first);
+              show(current);
               onSelect(today);
             }}
-            className="rounded-btn bg-surface-muted px-4 py-2 font-display font-semibold text-ink transition hover:bg-surface-hover"
+            className="rounded-btn bg-surface-muted px-4 py-2 font-display font-semibold text-ink transition enabled:hover:bg-surface-hover disabled:cursor-not-allowed disabled:opacity-30"
           >
             วันนี้
           </button>
@@ -281,7 +292,7 @@ function MonthCalendar({
                 <button
                   key={cell}
                   type="button"
-                  disabled={date < today}
+                  disabled={date < min || (!!max && date > max)}
                   aria-label={formatThaiDate(date)}
                   aria-pressed={selected}
                   onClick={() => onSelect(date)}
@@ -308,17 +319,29 @@ function MonthCalendar({
 export function DatePicker({
   id,
   today,
+  min,
+  max,
   value,
   onChange,
   invalid,
+  placeholder = "เลือกวันเดินทาง",
+  defaultOpen = !value,
+  clearable,
 }: {
   id: string;
   today: string;
+  min?: string;
+  max?: string;
   value: string;
+  // Receives "" only from a `clearable` picker.
   onChange: (date: string) => void;
   invalid?: boolean;
+  placeholder?: string;
+  defaultOpen?: boolean;
+  // Shows a button that empties the field.
+  clearable?: boolean;
 }) {
-  const [open, setOpen] = useState(!value);
+  const [open, setOpen] = useState(defaultOpen);
 
   return (
     <div
@@ -330,32 +353,49 @@ export function DatePicker({
             : "border-line-strong"
       }`}
     >
-      <button
-        id={id}
-        type="button"
-        aria-expanded={open}
-        aria-controls={`${id}-calendar`}
-        onClick={() => setOpen((current) => !current)}
-        className="flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left transition hover:bg-surface-hover"
-      >
-        <CalendarDays className="size-5 shrink-0 text-brand-600" aria-hidden />
-        <span
-          className={`flex-1 ${value ? "font-semibold text-ink" : "text-ink-subtle"}`}
+      <div className="flex items-center">
+        <button
+          id={id}
+          type="button"
+          aria-expanded={open}
+          aria-controls={`${id}-calendar`}
+          onClick={() => setOpen((current) => !current)}
+          className="flex min-w-0 flex-1 items-center gap-3 rounded-2xl px-4 py-3 text-left transition hover:bg-surface-hover"
         >
-          {value ? formatThaiDate(value) : "เลือกวันเดินทาง"}
-        </span>
-        <ChevronDown
-          aria-hidden
-          className={`size-5 shrink-0 text-ink-subtle transition-transform duration-300 ${
-            open ? "rotate-180" : ""
-          }`}
-        />
-      </button>
+          <CalendarDays
+            className="size-5 shrink-0 text-brand-600"
+            aria-hidden
+          />
+          <span
+            className={`flex-1 truncate ${value ? "font-semibold text-ink" : "text-ink-subtle"}`}
+          >
+            {value ? formatThaiDate(value) : placeholder}
+          </span>
+          <ChevronDown
+            aria-hidden
+            className={`size-5 shrink-0 text-ink-subtle transition-transform duration-300 ${
+              open ? "rotate-180" : ""
+            }`}
+          />
+        </button>
+        {clearable && value && (
+          <button
+            type="button"
+            aria-label="ล้างวันที่"
+            onClick={() => onChange("")}
+            className="mr-2 grid size-9 shrink-0 place-items-center rounded-btn text-ink-subtle transition hover:bg-surface-hover hover:text-ink"
+          >
+            <X className="size-4" aria-hidden />
+          </button>
+        )}
+      </div>
 
       <Collapse open={open} fade={false}>
         <div id={`${id}-calendar`} className="border-t border-line p-4">
           <MonthCalendar
             today={today}
+            min={min}
+            max={max}
             value={value}
             onSelect={(date) => {
               onChange(date);

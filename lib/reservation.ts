@@ -116,6 +116,25 @@ export type ReservationSummary = {
   status: string;
 };
 
+// What the admin page shows of each booking.
+export type AdminReservation = ReservationSummary & {
+  requester_name: string;
+  department: string | null;
+  phone: string;
+  passengers: number;
+  note: string | null;
+  created_at: string;
+};
+
+export const ADMIN_FILTERS = [
+  "pending",
+  "approved",
+  "rejected",
+  "cancelled",
+  "all",
+] as const;
+export type AdminFilter = (typeof ADMIN_FILTERS)[number];
+
 export const CODE_PREFIX = "STIN";
 // Bookings made before the prefix changed keep their "RS-" codes.
 const LEGACY_CODE_PREFIX = "RS";

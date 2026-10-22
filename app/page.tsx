@@ -1,6 +1,7 @@
 import Image from "next/image";
 import { HeroActions } from "@/components/cta";
 import { PageShell } from "@/components/page-shell";
+import { getSessionUser } from "@/lib/auth";
 import headerLogo from "@/public/header-logo.png";
 
 export default function Home() {
@@ -24,7 +25,9 @@ export default function Home() {
         </p>
 
         <div className="animate-fade-up mt-10 flex w-full flex-col justify-center gap-4 [animation-delay:300ms] sm:w-auto sm:flex-row">
-          <HeroActions />
+          <HeroActions
+            isAdminPromise={getSessionUser().then((user) => !!user?.isAdmin)}
+          />
         </div>
       </main>
     </PageShell>
