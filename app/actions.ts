@@ -125,6 +125,39 @@ export async function cancelReservation(code: string): Promise<CancelResult> {
   return { ok: true };
 }
 
+export type AdminDecision = "approved" | "rejected";
+
+// Approves or rejects a booking. The database function checks that the caller
+// is an admin, so this action needs no check of its own.
+export async function setReservationStatus(
+  code: string,
+  status: AdminDecision,
+): Promise<CancelResult> {
+  const normalized = normalizeCode(typeof code === "string" ? code : "");
+  if (!CODE_RE.test(normalized) || !["approved", "rejected"].includes(status)) {
+    return { ok: false, error: GENERIC_ERROR };
+  }
+
+  const supabase = await getSupabaseAuth();
+  if (!supabase) return { ok: false, error: NOT_CONFIGURED };
+
+  const { data, error } = await supabase.rpc("set_reservation_status", {
+    p_code: normalized,
+    p_status: status,
+  });
+  if (error) {
+    console.error("setReservationStatus failed", error);
+    return {
+      ok: false,
+      error:
+        error.code === "42501" ? "คุณไม่มีสิทธิ์ดำเนินการนี้" : GENERIC_ERROR,
+    };
+  }
+  refresh();
+  if (!data) return { ok: false, error: "ไม่สามารถเปลี่ยนสถานะการจองนี้ได้" };
+  return { ok: true };
+}
+
 // A well-formed code that matches nothing and a malformed one both come back
 // as an empty list: either way there is no such booking.
 export async function lookupReservationByCode(

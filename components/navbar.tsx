@@ -12,6 +12,7 @@ import {
   Menu,
   Plus,
   Search,
+  ShieldCheck,
   UserRoundCheck,
   X,
 } from "lucide-react";
@@ -48,10 +49,12 @@ function NavbarWithPathname({ userPromise }: { userPromise: UserPromise }) {
 
 function UserActions({
   userPromise,
+  pathname,
   mobile = false,
   onNavigate,
 }: {
   userPromise: UserPromise;
+  pathname: string;
   mobile?: boolean;
   onNavigate?: () => void;
 }) {
@@ -74,6 +77,24 @@ function UserActions({
     <div
       className={mobile ? "flex flex-col gap-2" : "flex items-center gap-3"}
     >
+      {user.isAdmin && (
+        <Link
+          href="/admin"
+          onClick={onNavigate}
+          title="ผู้ดูแลระบบ"
+          className={`flex items-center gap-2 rounded-btn border px-3 py-2 font-semibold transition ${
+            pathname === "/admin"
+              ? "border-brand-200 bg-brand-50 text-brand-700"
+              : "border-line-strong text-ink hover:border-brand-300 hover:bg-surface-hover"
+          }`}
+        >
+          <ShieldCheck size={18} aria-hidden />
+          {/* Icon only on narrower desktops, where the bar is full. */}
+          <span className={mobile ? "" : "sr-only xl:not-sr-only"}>
+            ผู้ดูแลระบบ
+          </span>
+        </Link>
+      )}
       <div
         className={`items-center gap-2 rounded-lg border border-line bg-surface-muted px-3 py-1.5 ${
           mobile ? "flex" : "hidden xl:flex"
@@ -163,7 +184,7 @@ function NavbarView({
           <Suspense
             fallback={<div className="skeleton h-11 w-36 rounded-btn" />}
           >
-            <UserActions userPromise={userPromise} />
+            <UserActions userPromise={userPromise} pathname={pathname} />
           </Suspense>
         </div>
 
@@ -210,6 +231,7 @@ function NavbarView({
                 >
                   <UserActions
                     userPromise={userPromise}
+                    pathname={pathname}
                     mobile
                     onNavigate={() => setMenuOpen(false)}
                   />

@@ -2,7 +2,7 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
 // Routes that need a signed-in user; everyone else is sent to the login page.
-const PROTECTED_ROUTES = ["/book", "/my-reservations"];
+const PROTECTED_ROUTES = ["/book", "/my-reservations", "/admin"];
 
 export async function proxy(request: NextRequest) {
   const url = process.env.SUPABASE_URL;
