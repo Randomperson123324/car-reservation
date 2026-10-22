@@ -1,0 +1,187 @@
+@import "tailwindcss";
+
+@theme inline {
+  --font-sans: var(--font-plex-thai), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-kanit), ui-sans-serif, system-ui, sans-serif;
+}
+
+/*
+ * Design tokens. Every color in the app resolves to one of these, so the
+ * site can be re-themed from this block alone.
+ */
+@theme {
+  /* Primary — red */
+  --color-brand-50: #fef2f2;
+  --color-brand-100: #fee2e2;
+  --color-brand-200: #fecaca;
+  --color-brand-300: #fca5a5;
+  --color-brand-400: #f87171;
+  --color-brand-500: #ef4444;
+  --color-brand-600: #dc2626;
+  --color-brand-700: #b91c1c;
+  --color-brand-800: #991b1b;
+  --color-brand-900: #7f1d1d;
+
+  /* Neutral surfaces & text — warm off-white */
+  --color-app: #fffaf9;
+  --color-surface: #ffffff;
+  --color-surface-muted: #fdf3f1;
+  --color-surface-hover: #faedeb;
+  --color-line: #f1e3e0;
+  --color-line-strong: #e7cfc9;
+  --color-ink: #27201e;
+  --color-ink-muted: #6b5e59;
+  --color-ink-subtle: #9c8c86;
+
+  /* The one radius every button uses (`rounded-btn`). */
+  --radius-btn: 1.25rem;
+
+  --shadow-card: 0 1px 2px rgb(39 32 30 / 0.04), 0 1px 3px rgb(39 32 30 / 0.06);
+  --shadow-card-hover:
+    0 12px 24px -8px rgb(39 32 30 / 0.12), 0 2px 6px rgb(39 32 30 / 0.06);
+
+  --animate-fade-up: fade-up 0.6s ease both;
+
+  @keyframes fade-up {
+    from {
+      opacity: 0;
+      transform: translateY(20px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+  @keyframes skeleton-shimmer {
+    to {
+      transform: translateX(100%);
+    }
+  }
+}
+
+@layer base {
+  html {
+    color-scheme: light;
+    scroll-behavior: smooth;
+    scrollbar-gutter: stable;
+  }
+
+  body {
+    background: var(--color-app);
+    color: var(--color-ink);
+    font-weight: 500;
+  }
+
+  h1,
+  h2,
+  h3 {
+    font-family: var(--font-display);
+  }
+  h2 {
+    font-size: 1.75rem;
+    font-weight: 600;
+    line-height: 1.3;
+  }
+  h3 {
+    font-size: 1.125rem;
+    font-weight: 600;
+  }
+
+  /* Sub-page title, shared by every page except the landing hero. */
+  h1.page-title {
+    font-size: 2.25rem;
+    font-weight: 700;
+    line-height: 1.25;
+  }
+  @media (min-width: 640px) {
+    h1.page-title {
+      font-size: 3rem;
+    }
+  }
+  @media (min-width: 1024px) {
+    h1.page-title {
+      font-size: 4rem;
+    }
+  }
+
+  ::selection {
+    background: var(--color-brand-600);
+    color: #ffffff;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-brand-600);
+    outline-offset: 2px;
+  }
+
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: var(--color-surface-muted);
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--color-brand-300);
+    border-radius: 3px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--color-brand-400);
+  }
+}
+
+@layer components {
+  /* Card surface — flat, bordered, softly elevated. */
+  .card {
+    @apply border border-line bg-surface shadow-card;
+  }
+
+  .field {
+    @apply w-full rounded-xl border border-line-strong bg-surface px-4 py-3 text-base text-ink transition placeholder:text-ink-subtle focus:border-brand-500 focus:ring-[3px] focus:ring-brand-500/15 focus:outline-none;
+  }
+  .field[aria-invalid="true"] {
+    @apply border-brand-500 bg-brand-50/50;
+  }
+
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-btn px-6 py-3 font-display text-lg font-semibold transition duration-150 active:scale-[0.98] disabled:pointer-events-none disabled:opacity-60;
+  }
+  .btn-primary {
+    @apply bg-brand-600 text-white hover:-translate-y-px hover:bg-brand-700 hover:shadow-[0_4px_14px_rgb(220_38_38/0.3)];
+  }
+  .btn-outline {
+    @apply border border-line-strong bg-surface text-ink hover:border-brand-300 hover:bg-surface-hover;
+  }
+  .btn-ghost {
+    @apply text-ink-muted hover:bg-surface-hover hover:text-ink;
+  }
+
+  /* Loading skeleton — a muted block with a light band sweeping across it. */
+  .skeleton {
+    @apply relative overflow-hidden bg-surface-muted;
+  }
+  .skeleton::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    transform: translateX(-100%);
+    background: linear-gradient(
+      90deg,
+      transparent,
+      rgb(255 255 255 / 0.8),
+      transparent
+    );
+    animation: skeleton-shimmer 1.6s ease-in-out infinite;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
