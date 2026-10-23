@@ -353,13 +353,11 @@ export function BookingWizard({ today }: { today: string }) {
                     <Field
                       id="position"
                       label="ตำแหน่ง"
-                      optional
                       error={errors.position}
                     >
                       <Select
                         id="position"
                         options={POSITIONS}
-                        clearable
                         value={form.position}
                         onChange={(position) => set("position", position)}
                         invalid={!!errors.position}

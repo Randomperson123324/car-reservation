@@ -235,7 +235,9 @@ export function validateReservation(
   if (name.length < 2) errors.name = "กรุณากรอกชื่อ-นามสกุล";
   else if (name.length > 120) errors.name = "ชื่อยาวเกินไป";
 
-  if (input.position && !POSITIONS.includes(input.position)) {
+  if (!input.position) {
+    errors.position = "กรุณาเลือกตำแหน่ง";
+  } else if (!POSITIONS.includes(input.position)) {
     errors.position = "กรุณาเลือกตำแหน่งจากรายการ";
   }
 
