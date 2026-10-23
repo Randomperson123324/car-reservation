@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { Hash, Phone, Plus, Search, type LucideIcon } from "lucide-react";
+import { Plus, Search } from "lucide-react";
 import { lookupReservationByCode, lookupReservations } from "@/app/actions";
 import { EASE, TransitionLink } from "@/components/page-transition";
 import { ReservationCard } from "@/components/reservation-card";
@@ -16,55 +16,48 @@ const itemVariants = {
   show: { opacity: 1, y: 0, transition: { duration: 0.4, ease: EASE } },
 };
 
-type Mode = "phone" | "code";
+type Kind = "phone" | "code";
 
-const MODES: {
-  id: Mode;
-  tab: string;
-  icon: LucideIcon;
-  label: string;
-  placeholder: string;
-  emptyTitle: string;
-  emptyHint: string;
-}[] = [
-  {
-    id: "phone",
-    tab: "เบอร์ติดต่อ",
-    icon: Phone,
-    label: "เบอร์ติดต่อที่ใช้จอง",
-    placeholder: "08x-xxx-xxxx",
-    emptyTitle: "ไม่พบการจองของเบอร์นี้",
-    emptyHint: "ตรวจสอบเบอร์อีกครั้ง หรือเริ่มจองรถใหม่",
+const EMPTY: Record<Kind, { title: string; hint: string }> = {
+  phone: {
+    title: "ไม่พบการจองของเบอร์นี้",
+    hint: "ตรวจสอบเบอร์อีกครั้ง หรือเริ่มจองรถใหม่",
   },
-  {
-    id: "code",
-    tab: "รหัสการจอง",
-    icon: Hash,
-    label: "รหัสการจองที่ได้รับ",
-    placeholder: "STIN-XXXXXX",
-    emptyTitle: "ไม่พบการจองรหัสนี้",
-    emptyHint: "ตรวจสอบรหัสอีกครั้ง หรือเริ่มจองรถใหม่",
+  code: {
+    title: "ไม่พบการจองรหัสนี้",
+    hint: "ตรวจสอบรหัสอีกครั้ง หรือเริ่มจองรถใหม่",
   },
-];
+};
+
+// A booking code has letters, or is the six characters after the prefix; a
+// phone number is only digits, and longer.
+function kindOf(query: string): Kind {
+  const compact = query.replace(/[^0-9A-Za-z]/g, "");
+  return /[A-Za-z]/.test(compact) || compact.length === 6 ? "code" : "phone";
+}
 
 export function CheckForm() {
-  const [mode, setMode] = useState<Mode>("phone");
-  // The mode of the search whose results are on screen.
-  const [searched, setSearched] = useState<Mode>("phone");
-  const [phone, setPhone] = useState("");
-  const [code, setCode] = useState("");
+  const [query, setQuery] = useState("");
+  // What the search whose results are on screen looked for.
+  const [searched, setSearched] = useState<Kind>("phone");
   const [error, setError] = useState("");
   const [items, setItems] = useState<ReservationSummary[] | null>(null);
   const [pending, startTransition] = useTransition();
 
   function search() {
     setError("");
+    if (!query.trim()) {
+      setItems(null);
+      setError("กรุณากรอกเบอร์ติดต่อหรือรหัสการจอง");
+      return;
+    }
+    const kind = kindOf(query);
     startTransition(async () => {
       const result =
-        mode === "code"
-          ? await lookupReservationByCode(code)
-          : await lookupReservations(phone);
-      setSearched(mode);
+        kind === "code"
+          ? await lookupReservationByCode(query)
+          : await lookupReservations(query);
+      setSearched(kind);
       if (result.ok) {
         setItems(result.items);
       } else {
@@ -74,8 +67,7 @@ export function CheckForm() {
     });
   }
 
-  const current = MODES.find((m) => m.id === mode) ?? MODES[0];
-  const empty = MODES.find((m) => m.id === searched) ?? MODES[0];
+  const empty = EMPTY[searched];
 
   return (
     <div>
@@ -87,57 +79,22 @@ export function CheckForm() {
         }}
         className="card animate-fade-up rounded-2xl p-6 [animation-delay:200ms]"
       >
-        <div className="mb-5 flex gap-2 rounded-xl bg-surface-muted p-1.5">
-          {MODES.map(({ id, tab, icon: Icon }) => (
-            <button
-              key={id}
-              type="button"
-              aria-pressed={mode === id}
-              onClick={() => {
-                setMode(id);
-                setError("");
-              }}
-              className={`inline-flex flex-1 items-center justify-center gap-2 rounded-lg px-3 py-2 font-semibold transition-colors ${
-                mode === id
-                  ? "bg-brand-600 text-white"
-                  : "text-ink-muted hover:bg-surface-hover hover:text-ink"
-              }`}
-            >
-              <Icon className="size-4" aria-hidden />
-              {tab}
-            </button>
-          ))}
-        </div>
         <label htmlFor="lookup" className="font-semibold text-ink">
-          {current.label}
+          เบอร์ติดต่อที่ใช้จอง หรือรหัสการจอง
         </label>
         <div className="mt-2 flex flex-col gap-3 sm:flex-row">
-          {mode === "code" ? (
-            <input
-              id="lookup"
-              type="text"
-              autoComplete="off"
-              autoCapitalize="characters"
-              spellCheck={false}
-              placeholder={current.placeholder}
-              value={code}
-              onChange={(e) => setCode(e.target.value.toUpperCase())}
-              aria-invalid={!!error}
-              className="field font-mono tracking-wider"
-            />
-          ) : (
-            <input
-              id="lookup"
-              type="tel"
-              inputMode="tel"
-              autoComplete="tel"
-              placeholder={current.placeholder}
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-              aria-invalid={!!error}
-              className="field"
-            />
-          )}
+          <input
+            id="lookup"
+            type="text"
+            autoComplete="off"
+            autoCapitalize="characters"
+            spellCheck={false}
+            placeholder="08x-xxx-xxxx หรือ STIN-XXXXXX"
+            value={query}
+            onChange={(e) => setQuery(e.target.value.toUpperCase())}
+            aria-invalid={!!error}
+            className="field"
+          />
           <button
             type="submit"
             disabled={pending}
@@ -188,8 +145,8 @@ export function CheckForm() {
             transition={{ duration: 0.4, ease: EASE }}
             className="rounded-2xl border border-dashed border-line-strong px-6 py-12 text-center"
           >
-            <h3 className="text-ink">{empty.emptyTitle}</h3>
-            <p className="mt-1 text-ink-muted">{empty.emptyHint}</p>
+            <h3 className="text-ink">{empty.title}</h3>
+            <p className="mt-1 text-ink-muted">{empty.hint}</p>
             <TransitionLink
               href="/book"
               label="จองรถ"
