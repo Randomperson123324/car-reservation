@@ -34,9 +34,11 @@ import {
   EMPTY_RESERVATION,
   MAX_PASSENGERS,
   POSITIONS,
+  TRIP_TIMES,
   TRIP_TYPES,
   formatThaiDate,
-  formatTime,
+  submittedTimes,
+  tripTimeRows,
   tripTypeLabel,
   validateReservation,
   type ReservationErrors,
@@ -290,46 +292,24 @@ export function BookingWizard({ today }: { today: string }) {
                 {step === 1 && (
                   <>
                     <div className="grid gap-6 sm:grid-cols-2">
-                      <Field
-                        id="departTime"
-                        label="เวลาออกเดินทาง"
-                        error={errors.departTime}
-                      >
-                        <TimeInput
-                          id="departTime"
-                          value={form.departTime}
-                          onChange={(time) => set("departTime", time)}
-                          invalid={!!errors.departTime}
-                        />
-                      </Field>
-                      <Field
-                        id="arriveTime"
-                        label="เวลาถึงสถานที่"
-                        error={errors.arriveTime}
-                      >
-                        <TimeInput
-                          id="arriveTime"
-                          value={form.arriveTime}
-                          onChange={(time) => set("arriveTime", time)}
-                          invalid={!!errors.arriveTime}
-                        />
-                      </Field>
+                      {(form.tripType ? TRIP_TIMES[form.tripType] : []).map(
+                        ({ field, label }) => (
+                          <Field
+                            key={field}
+                            id={field}
+                            label={label}
+                            error={errors[field]}
+                          >
+                            <TimeInput
+                              id={field}
+                              value={form[field]}
+                              onChange={(time) => set(field, time)}
+                              invalid={!!errors[field]}
+                            />
+                          </Field>
+                        ),
+                      )}
                     </div>
-                    {form.tripType === "drop_and_pick" && (
-                      <Field
-                        id="returnTime"
-                        label="เวลาที่ให้ไปรับกลับ"
-                        error={errors.returnTime}
-                      >
-                        <TimeInput
-                          id="returnTime"
-                          value={form.returnTime}
-                          onChange={(time) => set("returnTime", time)}
-                          invalid={!!errors.returnTime}
-                          className="sm:max-w-[calc(50%-0.75rem)]"
-                        />
-                      </Field>
-                    )}
                     <p className="rounded-xl bg-surface-muted px-4 py-3 text-sm text-ink-muted">
                       {formatThaiDate(form.travelDate)} ·{" "}
                       {tripTypeLabel(form.tripType)}
@@ -640,13 +620,9 @@ function Summary({ form }: { form: ReservationInput }) {
   const rows: [string, string][] = [
     ["วันเดินทาง", formatThaiDate(form.travelDate)],
     ["รูปแบบการเดินทาง", tripTypeLabel(form.tripType)],
-    ["เวลาออกเดินทาง", formatTime(form.departTime)],
-    ["เวลาถึงสถานที่", formatTime(form.arriveTime)],
+    ...tripTimeRows(form.tripType, submittedTimes(form)),
+    ["ผู้ใช้บริการ", form.name.trim()],
   ];
-  if (form.tripType === "drop_and_pick") {
-    rows.push(["เวลาที่ให้ไปรับกลับ", formatTime(form.returnTime)]);
-  }
-  rows.push(["ผู้ใช้บริการ", form.name.trim()]);
   if (form.position) rows.push(["ตำแหน่ง", form.position]);
   rows.push(
     ["เบอร์ติดต่อ", form.phone.trim()],

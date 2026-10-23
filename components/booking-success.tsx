@@ -9,7 +9,8 @@ import { EASE, TransitionLink } from "@/components/page-transition";
 import { ReservationSlip } from "@/components/reservation-slip";
 import {
   formatThaiDate,
-  formatTime,
+  submittedTimes,
+  tripTimeRows,
   type ReservationInput,
 } from "@/lib/reservation";
 
@@ -101,7 +102,8 @@ export function BookingSuccess({
           </div>
 
           <p className="mt-6 text-sm text-ink-muted">
-            {formatThaiDate(form.travelDate)} · {formatTime(form.departTime)} ·{" "}
+            {formatThaiDate(form.travelDate)} ·{" "}
+            {tripTimeRows(form.tripType, submittedTimes(form))[0]?.[1]} ·{" "}
             {form.destination.trim()}
           </p>
 

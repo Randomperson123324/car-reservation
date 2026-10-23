@@ -23,6 +23,66 @@ export const TRIP_TYPES = [
 
 export type TripTypeId = (typeof TRIP_TYPES)[number]["id"];
 
+export type TimeField = "departTime" | "arriveTime" | "returnTime";
+
+// The times each trip type asks for, in the order they happen. A trip with a
+// way back is timed from the departure to the return; the arrival time is
+// only asked for when the car goes out just to pick someone up.
+export const TRIP_TIMES: Record<
+  TripTypeId,
+  { field: TimeField; label: string }[]
+> = {
+  drop_off: [{ field: "departTime", label: "เวลาออกเดินทาง" }],
+  pick_up: [{ field: "arriveTime", label: "เวลาถึงสถานที่รับ" }],
+  drop_and_pick: [
+    { field: "departTime", label: "เวลาออกเดินทาง" },
+    { field: "returnTime", label: "เวลารับกลับ" },
+  ],
+  drop_and_wait: [
+    { field: "departTime", label: "เวลาออกเดินทาง" },
+    { field: "returnTime", label: "เวลากลับ" },
+  ],
+};
+
+// Labels for a time the booking's trip type does not ask for, which only
+// bookings made before the times depended on the trip type have.
+const LEGACY_TIME_LABELS: Record<TimeField, string> = {
+  departTime: "เวลาออกเดินทาง",
+  arriveTime: "เวลาถึงสถานที่",
+  returnTime: "เวลารับกลับ",
+};
+
+export function tripTimeFields(tripType: string): TimeField[] {
+  return (TRIP_TIMES[tripType as TripTypeId] ?? []).map((t) => t.field);
+}
+
+// The form's times that its trip type asks for. A time typed in before the
+// trip type was changed is left out.
+export function submittedTimes(
+  input: Pick<ReservationInput, "tripType" | TimeField>,
+): Record<TimeField, string | null> {
+  const fields = tripTimeFields(input.tripType);
+  return {
+    departTime: fields.includes("departTime") ? input.departTime : null,
+    arriveTime: fields.includes("arriveTime") ? input.arriveTime : null,
+    returnTime: fields.includes("returnTime") ? input.returnTime : null,
+  };
+}
+
+// The times a booking has, labelled for its trip type, as [label, "08:30 น."].
+export function tripTimeRows(
+  tripType: string,
+  times: Partial<Record<TimeField, string | null>>,
+): [string, string][] {
+  const labels = TRIP_TIMES[tripType as TripTypeId] ?? [];
+  return (["departTime", "arriveTime", "returnTime"] as const)
+    .filter((field) => times[field])
+    .map((field) => [
+      labels.find((t) => t.field === field)?.label ?? LEGACY_TIME_LABELS[field],
+      formatTime(times[field]!),
+    ]);
+}
+
 export const PROVINCES = [
   "กรุงเทพมหานคร",
   "นนทบุรี",
@@ -70,6 +130,7 @@ export const STATUS_LABELS: Record<string, string> = {
 };
 
 export const MAX_PASSENGERS = 50;
+export const REJECT_REASON_MAX = 500;
 
 export type ReservationInput = {
   travelDate: string;
@@ -108,12 +169,14 @@ export type ReservationSummary = {
   code: string;
   travel_date: string;
   trip_type: TripTypeId;
-  depart_time: string;
-  arrive_time: string;
+  depart_time: string | null;
+  arrive_time: string | null;
   return_time: string | null;
   province: string;
   destination: string;
   status: string;
+  // Why an admin turned the booking down; only some queries select it.
+  reject_reason?: string | null;
 };
 
 // What the admin page shows of each booking.
@@ -209,26 +272,18 @@ export function validateReservation(
     errors.tripType = "กรุณาเลือกรูปแบบการเดินทาง";
   }
 
-  if (!input.departTime.trim()) {
-    errors.departTime = "กรุณาระบุเวลาออกเดินทาง";
-  } else if (!TIME_RE.test(input.departTime)) {
-    errors.departTime = INVALID_TIME;
+  const times = TRIP_TIMES[input.tripType as TripTypeId] ?? [];
+  for (const { field, label } of times) {
+    if (!input[field].trim()) errors[field] = `กรุณาระบุ${label}`;
+    else if (!TIME_RE.test(input[field])) errors[field] = INVALID_TIME;
   }
-  if (!input.arriveTime.trim()) {
-    errors.arriveTime = "กรุณาระบุเวลาถึงสถานที่";
-  } else if (!TIME_RE.test(input.arriveTime)) {
-    errors.arriveTime = INVALID_TIME;
-  } else if (!errors.departTime && input.arriveTime <= input.departTime) {
-    errors.arriveTime = "เวลาถึงสถานที่ต้องหลังเวลาออกเดินทาง";
-  }
-  if (input.tripType === "drop_and_pick") {
-    if (!input.returnTime.trim()) {
-      errors.returnTime = "กรุณาระบุเวลาที่ให้ไปรับกลับ";
-    } else if (!TIME_RE.test(input.returnTime)) {
-      errors.returnTime = INVALID_TIME;
-    } else if (!errors.arriveTime && input.returnTime <= input.arriveTime) {
-      errors.returnTime = "เวลาไปรับกลับต้องหลังเวลาถึงสถานที่";
-    }
+  if (
+    times.length === 2 &&
+    !errors.departTime &&
+    !errors.returnTime &&
+    input.returnTime <= input.departTime
+  ) {
+    errors.returnTime = `${times[1].label}ต้องหลังเวลาออกเดินทาง`;
   }
 
   const name = input.name.trim();

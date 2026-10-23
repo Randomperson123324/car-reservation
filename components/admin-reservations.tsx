@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { setReservationStatuses, type AdminDecision } from "@/app/actions";
 import { AdminActions } from "@/components/admin-actions";
+import { Collapse } from "@/components/collapse";
 import { DatePicker } from "@/components/date-picker";
 import { EASE } from "@/components/page-transition";
 import { ReservationCard } from "@/components/reservation-card";
@@ -22,6 +23,7 @@ import { Select } from "@/components/select";
 import {
   ADMIN_FILTERS,
   PROVINCES,
+  REJECT_REASON_MAX,
   STATUS_LABELS,
   TRIP_TYPES,
   tripTypeLabel,
@@ -124,6 +126,8 @@ export function AdminReservations({
   const [bulkError, setBulkError] = useState("");
   const [bulkPending, startBulk] = useTransition();
   const [deciding, setDeciding] = useState<AdminDecision | null>(null);
+  const [bulkRejecting, setBulkRejecting] = useState(false);
+  const [bulkReason, setBulkReason] = useState("");
 
   function selectTab(next: AdminFilter) {
     if (next === tab) return;
@@ -188,6 +192,8 @@ export function AdminReservations({
     setSelecting(false);
     setSelected(new Set());
     setBulkError("");
+    setBulkRejecting(false);
+    setBulkReason("");
   }
 
   function decideAll(decision: AdminDecision) {
@@ -197,6 +203,7 @@ export function AdminReservations({
       const result = await setReservationStatuses(
         picked.map((r) => r.code),
         decision,
+        bulkReason,
       );
       setDeciding(null);
       if (!result.ok) {
@@ -204,6 +211,8 @@ export function AdminReservations({
         return;
       }
       setSelected(new Set());
+      setBulkRejecting(false);
+      setBulkReason("");
     });
   }
 
@@ -516,33 +525,81 @@ export function AdminReservations({
                 </span>
               )}
               <div className="ml-auto flex gap-2">
-                <button
-                  type="button"
-                  disabled={picked.length === 0 || bulkPending}
-                  onClick={() => decideAll("rejected")}
-                  className="btn btn-outline px-4 py-2 text-base"
-                >
-                  {deciding === "rejected" ? (
-                    spinner
-                  ) : (
-                    <X size={18} aria-hidden />
-                  )}
-                  ไม่อนุมัติ
-                </button>
-                <button
-                  type="button"
-                  disabled={picked.length === 0 || bulkPending}
-                  onClick={() => decideAll("approved")}
-                  className="btn bg-green-600 px-4 py-2 text-base text-white hover:-translate-y-px hover:bg-green-700"
-                >
-                  {deciding === "approved" ? (
-                    spinner
-                  ) : (
-                    <Check size={18} aria-hidden />
-                  )}
-                  อนุมัติ
-                </button>
+                {bulkRejecting ? (
+                  <>
+                    <button
+                      type="button"
+                      disabled={bulkPending}
+                      onClick={() => {
+                        setBulkRejecting(false);
+                        setBulkError("");
+                      }}
+                      className="btn btn-ghost px-4 py-2 text-base"
+                    >
+                      ยกเลิก
+                    </button>
+                    <button
+                      type="button"
+                      disabled={
+                        picked.length === 0 || bulkPending || !bulkReason.trim()
+                      }
+                      onClick={() => decideAll("rejected")}
+                      className="btn btn-primary px-4 py-2 text-base"
+                    >
+                      {deciding === "rejected" ? (
+                        spinner
+                      ) : (
+                        <X size={18} aria-hidden />
+                      )}
+                      ยืนยันไม่อนุมัติ
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <button
+                      type="button"
+                      disabled={picked.length === 0 || bulkPending}
+                      onClick={() => {
+                        setBulkRejecting(true);
+                        setBulkError("");
+                      }}
+                      className="btn btn-outline px-4 py-2 text-base"
+                    >
+                      <X size={18} aria-hidden />
+                      ไม่อนุมัติ
+                    </button>
+                    <button
+                      type="button"
+                      disabled={picked.length === 0 || bulkPending}
+                      onClick={() => decideAll("approved")}
+                      className="btn bg-green-600 px-4 py-2 text-base text-white hover:-translate-y-px hover:bg-green-700"
+                    >
+                      {deciding === "approved" ? (
+                        spinner
+                      ) : (
+                        <Check size={18} aria-hidden />
+                      )}
+                      อนุมัติ
+                    </button>
+                  </>
+                )}
               </div>
+              <Collapse open={bulkRejecting} className="w-full">
+                <div className="-mx-1 px-1 pb-1 pt-1">
+                  <label htmlFor="bulk-reject" className="sr-only">
+                    หมายเหตุที่ไม่อนุมัติ
+                  </label>
+                  <textarea
+                    id="bulk-reject"
+                    rows={2}
+                    maxLength={REJECT_REASON_MAX}
+                    placeholder={`หมายเหตุที่ไม่อนุมัติ (ใช้กับทั้ง ${picked.length} รายการ)`}
+                    value={bulkReason}
+                    onChange={(e) => setBulkReason(e.target.value)}
+                    className="field resize-y"
+                  />
+                </div>
+              </Collapse>
             </div>
           </motion.div>
         )}

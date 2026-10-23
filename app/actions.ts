@@ -8,9 +8,11 @@ import {
   EMPTY_RESERVATION,
   CODE_PREFIX,
   CODE_RE,
+  REJECT_REASON_MAX,
   bangkokToday,
   normalizeCode,
   normalizePhone,
+  submittedTimes,
   validateReservation,
   type ReservationErrors,
   type ReservationField,
@@ -70,13 +72,14 @@ export async function createReservation(
   const supabase = await getSupabaseAuth();
   if (!supabase) return { ok: false, error: NOT_CONFIGURED };
 
+  const times = submittedTimes(input);
   const row = {
     user_id: user.id,
     travel_date: input.travelDate,
     trip_type: input.tripType,
-    depart_time: input.departTime,
-    arrive_time: input.arriveTime,
-    return_time: input.tripType === "drop_and_pick" ? input.returnTime : null,
+    depart_time: times.departTime,
+    arrive_time: times.arriveTime,
+    return_time: times.returnTime,
     requester_name: input.name.trim(),
     // The column predates the switch from a free-text department to a
     // position picked from a list.
@@ -127,16 +130,29 @@ export async function cancelReservation(code: string): Promise<CancelResult> {
 
 export type AdminDecision = "approved" | "rejected";
 
+const REASON_REQUIRED = "กรุณาระบุหมายเหตุที่ไม่อนุมัติ";
+
+// The reason a rejection must give, trimmed; null when it is missing or too
+// long. Approvals carry none.
+function rejectReason(status: AdminDecision, raw: unknown) {
+  if (status !== "rejected") return "";
+  const reason = typeof raw === "string" ? raw.trim() : "";
+  return reason && reason.length <= REJECT_REASON_MAX ? reason : null;
+}
+
 // Approves or rejects a booking. The database function checks that the caller
 // is an admin, so this action needs no check of its own.
 export async function setReservationStatus(
   code: string,
   status: AdminDecision,
+  reason?: string,
 ): Promise<CancelResult> {
   const normalized = normalizeCode(typeof code === "string" ? code : "");
   if (!CODE_RE.test(normalized) || !["approved", "rejected"].includes(status)) {
     return { ok: false, error: GENERIC_ERROR };
   }
+  const note = rejectReason(status, reason);
+  if (note === null) return { ok: false, error: REASON_REQUIRED };
 
   const supabase = await getSupabaseAuth();
   if (!supabase) return { ok: false, error: NOT_CONFIGURED };
@@ -144,6 +160,7 @@ export async function setReservationStatus(
   const { data, error } = await supabase.rpc("set_reservation_status", {
     p_code: normalized,
     p_status: status,
+    p_reason: note || null,
   });
   if (error) {
     console.error("setReservationStatus failed", error);
@@ -165,6 +182,7 @@ export type BulkResult =
 export async function setReservationStatuses(
   codes: string[],
   status: AdminDecision,
+  reason?: string,
 ): Promise<BulkResult> {
   const normalized = Array.isArray(codes)
     ? [
@@ -181,6 +199,8 @@ export async function setReservationStatuses(
   ) {
     return { ok: false, error: GENERIC_ERROR };
   }
+  const note = rejectReason(status, reason);
+  if (note === null) return { ok: false, error: REASON_REQUIRED };
 
   const supabase = await getSupabaseAuth();
   if (!supabase) return { ok: false, error: NOT_CONFIGURED };
@@ -188,6 +208,7 @@ export async function setReservationStatuses(
   const { data, error } = await supabase.rpc("set_reservation_statuses", {
     p_codes: normalized,
     p_status: status,
+    p_reason: note || null,
   });
   if (error) {
     console.error("setReservationStatuses failed", error);

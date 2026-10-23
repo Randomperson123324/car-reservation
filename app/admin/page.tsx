@@ -58,7 +58,7 @@ async function List({
     ? await supabase
         .from("reservations")
         .select(
-          "code, travel_date, trip_type, depart_time, arrive_time, return_time, province, destination, status, requester_name, department, phone, passengers, note, created_at",
+          "code, travel_date, trip_type, depart_time, arrive_time, return_time, province, destination, status, reject_reason, requester_name, department, phone, passengers, note, created_at",
         )
         .order("travel_date", { ascending: true })
         .order("depart_time", { ascending: true })

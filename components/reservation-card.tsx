@@ -2,7 +2,7 @@ import { CalendarDays, Clock, MapPin } from "lucide-react";
 import {
   STATUS_LABELS,
   formatThaiDate,
-  formatTime,
+  tripTimeRows,
   tripTypeLabel,
   type ReservationSummary,
 } from "@/lib/reservation";
@@ -41,9 +41,13 @@ export function ReservationCard({ item }: { item: ReservationSummary }) {
           <Clock size={16} className="text-brand-600" aria-hidden />
           <dt className="sr-only">เวลา</dt>
           <dd>
-            ออก {formatTime(item.depart_time)} · ถึง{" "}
-            {formatTime(item.arrive_time)}
-            {item.return_time && ` · รับกลับ ${formatTime(item.return_time)}`}
+            {tripTimeRows(item.trip_type, {
+              departTime: item.depart_time,
+              arriveTime: item.arrive_time,
+              returnTime: item.return_time,
+            })
+              .map(([label, time]) => `${label.replace(/^เวลา/, "")} ${time}`)
+              .join(" · ")}
           </dd>
         </div>
         <div className="flex items-center gap-2 sm:col-span-2">
@@ -54,6 +58,12 @@ export function ReservationCard({ item }: { item: ReservationSummary }) {
           </dd>
         </div>
       </dl>
+      {item.status === "rejected" && item.reject_reason && (
+        <p className="mt-3 rounded-xl border border-brand-200 bg-brand-50 px-4 py-2.5 text-sm break-words text-brand-700">
+          <span className="font-semibold">เหตุผลที่ไม่อนุมัติ:</span>{" "}
+          {item.reject_reason}
+        </p>
+      )}
     </>
   );
 }

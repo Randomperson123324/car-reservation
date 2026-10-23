@@ -7,7 +7,8 @@ import QRCode from "qrcode";
 import {
   STATUS_LABELS,
   formatThaiDate,
-  formatTime,
+  submittedTimes,
+  tripTimeRows,
   tripTypeLabel,
   type ReservationInput,
 } from "@/lib/reservation";
@@ -83,13 +84,9 @@ export function ReservationSlip({
   const rows: [string, string][] = [
     ["วันเดินทาง", formatThaiDate(form.travelDate)],
     ["รูปแบบ", tripTypeLabel(form.tripType)],
-    ["ออกเดินทาง", formatTime(form.departTime)],
-    ["ถึงสถานที่", formatTime(form.arriveTime)],
+    ...tripTimeRows(form.tripType, submittedTimes(form)),
+    ["ผู้ใช้บริการ", form.name.trim()],
   ];
-  if (form.tripType === "drop_and_pick") {
-    rows.push(["รับกลับ", formatTime(form.returnTime)]);
-  }
-  rows.push(["ผู้ใช้บริการ", form.name.trim()]);
   if (form.position) rows.push(["ตำแหน่ง", form.position]);
   rows.push(
     ["เบอร์ติดต่อ", form.phone.trim()],
