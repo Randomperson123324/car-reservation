@@ -24,7 +24,7 @@ import {
 } from "lucide-react";
 import { BookingSuccess } from "@/components/booking-success";
 import { Collapse } from "@/components/collapse";
-import { DatePicker } from "@/components/date-picker";
+import { MultiDatePicker } from "@/components/date-picker";
 import { DestinationInput } from "@/components/destination-input";
 import { ProvinceMap } from "@/components/province-map";
 import { Select } from "@/components/select";
@@ -33,14 +33,17 @@ import { createReservation } from "@/app/actions";
 import {
   EMPTY_RESERVATION,
   MAX_PASSENGERS,
+  MAX_TRAVEL_DAYS,
   POSITIONS,
   TRIP_TIMES,
   TRIP_TYPES,
   formatThaiDate,
+  formatTravelDates,
   submittedTimes,
   tripTimeRows,
   tripTypeLabel,
   validateReservation,
+  type BookedDay,
   type ReservationErrors,
   type ReservationField,
   type ReservationInput,
@@ -57,7 +60,7 @@ const STEPS: {
     title: "วันเดินทาง",
     heading: "เดินทางวันไหน และแบบใด",
     icon: CalendarDays,
-    fields: ["travelDate", "tripType"],
+    fields: ["travelDates", "tripType"],
   },
   {
     title: "เวลา",
@@ -101,11 +104,11 @@ const stepSlideVariants = {
   enter: (direction: number) => ({ x: direction > 0 ? "100%" : "-100%" }),
   center: {
     x: 0,
-    transition: { type: "spring" as const, stiffness: 300, damping: 28 },
+    transition: { type: "spring" as const, stiffness: 500, damping: 36 },
   },
   exit: (direction: number) => ({
     x: direction > 0 ? "-100%" : "100%",
-    transition: { duration: 0.2, ease: "easeIn" as const },
+    transition: { duration: 0.12, ease: "easeIn" as const },
   }),
 };
 
@@ -115,7 +118,7 @@ export function BookingWizard({ today }: { today: string }) {
   const [step, setStep] = useState(0);
   const [direction, setDirection] = useState(1);
   const [submitError, setSubmitError] = useState("");
-  const [code, setCode] = useState("");
+  const [bookings, setBookings] = useState<BookedDay[]>([]);
   const [sentDate, setSentDate] = useState("");
   const [pending, startTransition] = useTransition();
 
@@ -145,7 +148,7 @@ export function BookingWizard({ today }: { today: string }) {
       const result = await createReservation(form);
       if (result.ok) {
         setSentDate(result.sentDate);
-        setCode(result.code);
+        setBookings(result.bookings);
         return;
       }
       if (result.fieldErrors) {
@@ -168,7 +171,7 @@ export function BookingWizard({ today }: { today: string }) {
     if (event.isComposing || event.shiftKey || event.ctrlKey) return;
     if (event.altKey || event.metaKey) return;
     // The last step sends the booking, which stays a deliberate click.
-    if (code || pending || step === LAST_STEP) return;
+    if (bookings.length || pending || step === LAST_STEP) return;
     const target = event.target as HTMLElement;
     // Enter keeps its own meaning in the note (new line), in the navbar, and
     // on a focused dropdown option.
@@ -184,8 +187,10 @@ export function BookingWizard({ today }: { today: string }) {
     return () => document.removeEventListener("keydown", listener);
   }, []);
 
-  if (code) {
-    return <BookingSuccess code={code} sentDate={sentDate} form={form} />;
+  if (bookings.length) {
+    return (
+      <BookingSuccess bookings={bookings} sentDate={sentDate} form={form} />
+    );
   }
 
   const StepIcon = STEPS[step].icon;
@@ -234,16 +239,17 @@ export function BookingWizard({ today }: { today: string }) {
                 {step === 0 && (
                   <>
                     <Field
-                      id="travelDate"
+                      id="travelDates"
                       label="วันเดินทาง"
-                      error={errors.travelDate}
+                      error={errors.travelDates}
                     >
-                      <DatePicker
-                        id="travelDate"
+                      <MultiDatePicker
+                        id="travelDates"
                         today={today}
-                        value={form.travelDate}
-                        onChange={(date) => set("travelDate", date)}
-                        invalid={!!errors.travelDate}
+                        limit={MAX_TRAVEL_DAYS}
+                        value={form.travelDates}
+                        onChange={(dates) => set("travelDates", dates)}
+                        invalid={!!errors.travelDates}
                       />
                     </Field>
 
@@ -311,7 +317,7 @@ export function BookingWizard({ today }: { today: string }) {
                       )}
                     </div>
                     <p className="rounded-xl bg-surface-muted px-4 py-3 text-sm text-ink-muted">
-                      {formatThaiDate(form.travelDate)} ·{" "}
+                      {formatTravelDates(form.travelDates)} ·{" "}
                       {tripTypeLabel(form.tripType)}
                     </p>
                   </>
@@ -464,27 +470,30 @@ export function BookingWizard({ today }: { today: string }) {
                 ) : (
                   <span />
                 )}
-                <button
-                  type="submit"
-                  disabled={pending}
-                  className="btn btn-primary"
-                >
-                  {step === LAST_STEP ? (
-                    <>
-                      {pending ? (
-                        <span className="size-4 animate-spin rounded-full border-2 border-white/40 border-t-white" />
-                      ) : (
-                        <Check className="size-4" aria-hidden />
-                      )}
-                      {pending ? "กำลังส่งคำขอ" : "ยืนยันการจอง"}
-                    </>
-                  ) : (
-                    <>
-                      ถัดไป
-                      <ArrowRight className="size-4" aria-hidden />
-                    </>
-                  )}
-                </button>
+                <div className="flex items-center gap-3">
+                  {step < LAST_STEP && <EnterHint />}
+                  <button
+                    type="submit"
+                    disabled={pending}
+                    className="btn btn-primary"
+                  >
+                    {step === LAST_STEP ? (
+                      <>
+                        {pending ? (
+                          <span className="size-4 animate-spin rounded-full border-2 border-white/40 border-t-white" />
+                        ) : (
+                          <Check className="size-4" aria-hidden />
+                        )}
+                        {pending ? "กำลังส่งคำขอ" : "ยืนยันการจอง"}
+                      </>
+                    ) : (
+                      <>
+                        ถัดไป
+                        <ArrowRight className="size-4" aria-hidden />
+                      </>
+                    )}
+                  </button>
+                </div>
               </div>
             </motion.form>
           </AnimatePresence>
@@ -606,6 +615,18 @@ function Field({
   );
 }
 
+// Tells keyboard users that Enter moves on; hidden on touch-sized screens.
+function EnterHint() {
+  return (
+    <span className="hidden items-center gap-1.5 text-sm text-ink-subtle md:inline-flex">
+      <kbd className="rounded border border-line-strong bg-surface px-1.5 font-mono text-xs text-ink-muted">
+        Enter ↵
+      </kbd>
+      ไปต่อ
+    </span>
+  );
+}
+
 function ErrorText({ message }: { message?: string }) {
   return (
     <Collapse open={!!message}>
@@ -617,34 +638,63 @@ function ErrorText({ message }: { message?: string }) {
 }
 
 function Summary({ form }: { form: ReservationInput }) {
-  const rows: [string, string][] = [
-    ["วันเดินทาง", formatThaiDate(form.travelDate)],
-    ["รูปแบบการเดินทาง", tripTypeLabel(form.tripType)],
-    ...tripTimeRows(form.tripType, submittedTimes(form)),
-    ["ผู้ใช้บริการ", form.name.trim()],
-  ];
+  const dates = [...form.travelDates].sort();
+  // Every day shares the same times, e.g. "ออกเดินทาง 06:00 น. · รับกลับ 15:00 น.".
+  const times = tripTimeRows(form.tripType, submittedTimes(form))
+    .map(([label, time]) => `${label.replace(/^เวลา/, "")} ${time}`)
+    .join(" · ");
+  const rows: [string, string][] = [["ผู้ใช้บริการ", form.name.trim()]];
   if (form.position) rows.push(["ตำแหน่ง", form.position]);
   rows.push(
     ["เบอร์ติดต่อ", form.phone.trim()],
     ["จำนวนผู้โดยสาร", `${form.passengers} คน`],
-    ["จังหวัด", form.province],
-    ["สถานที่", form.destination.trim()],
   );
   if (form.note.trim()) rows.push(["หมายเหตุ", form.note.trim()]);
 
   return (
-    <dl className="divide-y divide-line rounded-2xl border border-line-strong bg-surface-muted px-5">
-      {rows.map(([label, value]) => (
-        <div
-          key={label}
-          className="flex flex-col gap-1 py-3.5 sm:flex-row sm:justify-between sm:gap-6"
-        >
-          <dt className="shrink-0 text-sm text-ink-muted">{label}</dt>
-          <dd className="font-medium break-words text-ink sm:text-right">
-            {value}
-          </dd>
-        </div>
-      ))}
-    </dl>
+    <div className="space-y-4">
+      <section>
+        <p className="text-sm text-ink-muted">สถานที่</p>
+        <h3 className="mt-1 break-words text-xl text-ink">
+          {form.destination.trim()}
+        </h3>
+        <p className="mt-1 flex items-center gap-2 text-ink-muted">
+          <MapPin size={16} className="text-brand-600" aria-hidden />
+          {tripTypeLabel(form.tripType)} · {form.province}
+        </p>
+      </section>
+      <section>
+        <h3 className="text-sm text-ink-muted">
+          วันเดินทาง
+          {dates.length > 1 && (
+            <span className="font-semibold text-ink">
+              {" "}
+              · {dates.length} วัน
+            </span>
+          )}
+        </h3>
+        <ul className="mt-2 divide-y divide-line rounded-xl border border-line bg-surface">
+          {dates.map((date) => (
+            <li key={date} className="px-4 py-3">
+              <p className="font-semibold text-ink">{formatThaiDate(date)}</p>
+              {times && <p className="text-sm text-ink-muted">{times}</p>}
+            </li>
+          ))}
+        </ul>
+      </section>
+      <dl className="divide-y divide-line rounded-2xl border border-line-strong bg-surface-muted px-5">
+        {rows.map(([label, value]) => (
+          <div
+            key={label}
+            className="flex flex-col gap-1 py-3.5 sm:flex-row sm:justify-between sm:gap-6"
+          >
+            <dt className="shrink-0 text-sm text-ink-muted">{label}</dt>
+            <dd className="font-medium break-words text-ink sm:text-right">
+              {value}
+            </dd>
+          </div>
+        ))}
+      </dl>
+    </div>
   );
 }

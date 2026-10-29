@@ -130,10 +130,13 @@ export const STATUS_LABELS: Record<string, string> = {
 };
 
 export const MAX_PASSENGERS = 50;
+// A request may cover several days; each becomes a booking of its own.
+export const MAX_TRAVEL_DAYS = 31;
 export const REJECT_REASON_MAX = 500;
 
 export type ReservationInput = {
-  travelDate: string;
+  // Sorted, as YYYY-MM-DD.
+  travelDates: string[];
   tripType: TripTypeId | "";
   departTime: string;
   arriveTime: string;
@@ -151,7 +154,7 @@ export type ReservationField = keyof ReservationInput;
 export type ReservationErrors = Partial<Record<ReservationField, string>>;
 
 export const EMPTY_RESERVATION: ReservationInput = {
-  travelDate: "",
+  travelDates: [],
   tripType: "",
   departTime: "",
   arriveTime: "",
@@ -164,6 +167,9 @@ export const EMPTY_RESERVATION: ReservationInput = {
   destination: "",
   note: "",
 };
+
+// One booking made from a request, for each of its days.
+export type BookedDay = { code: string; travelDate: string };
 
 export type ReservationSummary = {
   code: string;
@@ -179,15 +185,57 @@ export type ReservationSummary = {
   reject_reason?: string | null;
 };
 
+export const SORT_ORDERS = ["วันเดินทาง", "วันที่ส่งคำขอ"] as const;
+export type SortOrder = (typeof SORT_ORDERS)[number];
+
+// Lists arrive in travel-date order; the other order puts the newest request
+// first, keeping travel order among bookings sent together.
+export function sortReservations<T extends { created_at: string }>(
+  items: T[],
+  order: SortOrder,
+) {
+  if (order === "วันเดินทาง") return items;
+  return [...items].sort(
+    (a, b) => Date.parse(b.created_at) - Date.parse(a.created_at),
+  );
+}
+
 // What the admin page shows of each booking.
 export type AdminReservation = ReservationSummary & {
+  // Shared by the bookings one request made; null on older bookings.
+  group_id: string | null;
   requester_name: string;
   department: string | null;
   phone: string;
   passengers: number;
   note: string | null;
   created_at: string;
+  // The car and driver assigned on approval.
+  vehicle_id: string | null;
+  driver_id: string | null;
 };
+
+// The cars and drivers an admin assigns, managed on the settings page. One no
+// longer in use is inactive: kept for past bookings, but not offered.
+export type Vehicle = {
+  id: string;
+  plate: string;
+  description: string | null;
+  active: boolean;
+};
+
+export type Driver = {
+  id: string;
+  name: string;
+  phone: string | null;
+  active: boolean;
+};
+
+export function vehicleLabel(vehicle: Pick<Vehicle, "plate" | "description">) {
+  return vehicle.description
+    ? `${vehicle.plate} · ${vehicle.description}`
+    : vehicle.plate;
+}
 
 export const ADMIN_FILTERS = [
   "pending",
@@ -252,6 +300,24 @@ export function formatThaiDate(date: string) {
   }).format(new Date(`${date}T00:00:00Z`));
 }
 
+// Short enough to list several dates on one line.
+export function formatShortThaiDate(date: string) {
+  if (!DATE_RE.test(date)) return date;
+  return new Intl.DateTimeFormat("th-TH", {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+    year: "2-digit",
+    timeZone: "UTC",
+  }).format(new Date(`${date}T00:00:00Z`));
+}
+
+// A request's days: the full date for one, a count and short dates for more.
+export function formatTravelDates(dates: string[]) {
+  if (dates.length === 1) return formatThaiDate(dates[0]);
+  return `${dates.length} วัน · ${dates.map(formatShortThaiDate).join(", ")}`;
+}
+
 export function formatTime(time: string) {
   return `${time.slice(0, 5)} น.`;
 }
@@ -262,10 +328,18 @@ export function validateReservation(
 ): ReservationErrors {
   const errors: ReservationErrors = {};
 
-  if (!DATE_RE.test(input.travelDate)) {
-    errors.travelDate = "กรุณาเลือกวันเดินทาง";
-  } else if (input.travelDate < today) {
-    errors.travelDate = "วันเดินทางต้องไม่เป็นวันที่ผ่านมาแล้ว";
+  const dates = input.travelDates;
+  if (dates.length === 0) {
+    errors.travelDates = "กรุณาเลือกวันเดินทาง";
+  } else if (dates.length > MAX_TRAVEL_DAYS) {
+    errors.travelDates = `เลือกวันเดินทางได้ไม่เกิน ${MAX_TRAVEL_DAYS} วัน`;
+  } else if (
+    !dates.every((date) => DATE_RE.test(date)) ||
+    new Set(dates).size !== dates.length
+  ) {
+    errors.travelDates = "วันเดินทางไม่ถูกต้อง";
+  } else if (dates.some((date) => date < today)) {
+    errors.travelDates = "วันเดินทางต้องไม่เป็นวันที่ผ่านมาแล้ว";
   }
 
   if (!TRIP_TYPES.some((t) => t.id === input.tripType)) {

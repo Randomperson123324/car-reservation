@@ -1,6 +1,6 @@
 "use server";
 
-import { randomInt } from "node:crypto";
+import { randomInt, randomUUID } from "node:crypto";
 import { refresh } from "next/cache";
 import { getSessionUser } from "@/lib/auth";
 import { getSupabase, getSupabaseAuth } from "@/lib/supabase";
@@ -14,6 +14,7 @@ import {
   normalizePhone,
   submittedTimes,
   validateReservation,
+  type BookedDay,
   type ReservationErrors,
   type ReservationField,
   type ReservationInput,
@@ -27,7 +28,7 @@ const CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 const UNIQUE_VIOLATION = "23505";
 
 export type CreateReservationResult =
-  | { ok: true; code: string; sentDate: string }
+  | { ok: true; bookings: BookedDay[]; sentDate: string }
   | { ok: false; error: string; fieldErrors?: ReservationErrors };
 
 export type LookupResult =
@@ -47,10 +48,15 @@ function toInput(raw: unknown): ReservationInput {
     string,
     unknown
   >;
-  const input: Record<string, string> = { ...EMPTY_RESERVATION };
+  const input: Record<string, unknown> = { ...EMPTY_RESERVATION };
   for (const key of Object.keys(EMPTY_RESERVATION) as ReservationField[]) {
     if (typeof source[key] === "string") input[key] = source[key];
   }
+  // The one list field; validation caps its length.
+  const dates = source.travelDates;
+  input.travelDates = Array.isArray(dates)
+    ? [...dates].filter((date) => typeof date === "string").sort()
+    : [];
   return input as ReservationInput;
 }
 
@@ -73,9 +79,11 @@ export async function createReservation(
   if (!supabase) return { ok: false, error: NOT_CONFIGURED };
 
   const times = submittedTimes(input);
+  // Every day is a booking of its own, so each can be approved on its own;
+  // the shared group id keeps them together on the admin page.
   const row = {
     user_id: user.id,
-    travel_date: input.travelDate,
+    group_id: randomUUID(),
     trip_type: input.tripType,
     depart_time: times.departTime,
     arrive_time: times.arriveTime,
@@ -92,11 +100,21 @@ export async function createReservation(
   };
 
   for (let attempt = 0; attempt < 3; attempt++) {
-    const code = newCode();
-    const { error } = await supabase
-      .from("reservations")
-      .insert({ ...row, code });
-    if (!error) return { ok: true, code, sentDate: bangkokToday() };
+    const codes = new Set<string>();
+    while (codes.size < input.travelDates.length) codes.add(newCode());
+    const bookings = [...codes].map((code, i) => ({
+      code,
+      travelDate: input.travelDates[i],
+    }));
+    // One statement, so either every day is booked or none is.
+    const { error } = await supabase.from("reservations").insert(
+      bookings.map(({ code, travelDate }) => ({
+        ...row,
+        code,
+        travel_date: travelDate,
+      })),
+    );
+    if (!error) return { ok: true, bookings, sentDate: bangkokToday() };
     if (error.code !== UNIQUE_VIOLATION) {
       console.error("createReservation failed", error);
       break;
@@ -130,7 +148,13 @@ export async function cancelReservation(code: string): Promise<CancelResult> {
 
 export type AdminDecision = "approved" | "rejected";
 
+// The car and driver an approval assigns.
+export type Assignment = { vehicleId: string; driverId: string };
+
 const REASON_REQUIRED = "กรุณาระบุหมายเหตุที่ไม่อนุมัติ";
+const ASSIGNMENT_REQUIRED = "กรุณาเลือกทะเบียนรถและคนขับ";
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 // The reason a rejection must give, trimmed; null when it is missing or too
 // long. Approvals carry none.
@@ -140,12 +164,40 @@ function rejectReason(status: AdminDecision, raw: unknown) {
   return reason && reason.length <= REJECT_REASON_MAX ? reason : null;
 }
 
+// The car and driver an approval must name; null when either is missing.
+// Rejections carry none.
+function assignment(status: AdminDecision, raw: unknown) {
+  if (status !== "approved") return { vehicleId: null, driverId: null };
+  const source = (raw && typeof raw === "object" ? raw : {}) as Record<
+    string,
+    unknown
+  >;
+  const { vehicleId, driverId } = source;
+  if (
+    typeof vehicleId !== "string" ||
+    typeof driverId !== "string" ||
+    !UUID_RE.test(vehicleId) ||
+    !UUID_RE.test(driverId)
+  ) {
+    return null;
+  }
+  return { vehicleId, driverId };
+}
+
+function decisionError(error: { code?: string }) {
+  if (error.code === "42501") return "คุณไม่มีสิทธิ์ดำเนินการนี้";
+  // The car or driver was deactivated or removed meanwhile.
+  if (error.code === "22023") return "รถหรือคนขับที่เลือกไม่พร้อมใช้งาน";
+  return GENERIC_ERROR;
+}
+
 // Approves or rejects a booking. The database function checks that the caller
 // is an admin, so this action needs no check of its own.
 export async function setReservationStatus(
   code: string,
   status: AdminDecision,
   reason?: string,
+  assign?: Assignment,
 ): Promise<CancelResult> {
   const normalized = normalizeCode(typeof code === "string" ? code : "");
   if (!CODE_RE.test(normalized) || !["approved", "rejected"].includes(status)) {
@@ -153,6 +205,8 @@ export async function setReservationStatus(
   }
   const note = rejectReason(status, reason);
   if (note === null) return { ok: false, error: REASON_REQUIRED };
+  const assigned = assignment(status, assign);
+  if (assigned === null) return { ok: false, error: ASSIGNMENT_REQUIRED };
 
   const supabase = await getSupabaseAuth();
   if (!supabase) return { ok: false, error: NOT_CONFIGURED };
@@ -161,14 +215,12 @@ export async function setReservationStatus(
     p_code: normalized,
     p_status: status,
     p_reason: note || null,
+    p_vehicle_id: assigned.vehicleId,
+    p_driver_id: assigned.driverId,
   });
   if (error) {
     console.error("setReservationStatus failed", error);
-    return {
-      ok: false,
-      error:
-        error.code === "42501" ? "คุณไม่มีสิทธิ์ดำเนินการนี้" : GENERIC_ERROR,
-    };
+    return { ok: false, error: decisionError(error) };
   }
   refresh();
   if (!data) return { ok: false, error: "ไม่สามารถเปลี่ยนสถานะการจองนี้ได้" };
@@ -183,6 +235,7 @@ export async function setReservationStatuses(
   codes: string[],
   status: AdminDecision,
   reason?: string,
+  assign?: Assignment,
 ): Promise<BulkResult> {
   const normalized = Array.isArray(codes)
     ? [
@@ -201,6 +254,8 @@ export async function setReservationStatuses(
   }
   const note = rejectReason(status, reason);
   if (note === null) return { ok: false, error: REASON_REQUIRED };
+  const assigned = assignment(status, assign);
+  if (assigned === null) return { ok: false, error: ASSIGNMENT_REQUIRED };
 
   const supabase = await getSupabaseAuth();
   if (!supabase) return { ok: false, error: NOT_CONFIGURED };
@@ -209,14 +264,12 @@ export async function setReservationStatuses(
     p_codes: normalized,
     p_status: status,
     p_reason: note || null,
+    p_vehicle_id: assigned.vehicleId,
+    p_driver_id: assigned.driverId,
   });
   if (error) {
     console.error("setReservationStatuses failed", error);
-    return {
-      ok: false,
-      error:
-        error.code === "42501" ? "คุณไม่มีสิทธิ์ดำเนินการนี้" : GENERIC_ERROR,
-    };
+    return { ok: false, error: decisionError(error) };
   }
   refresh();
   return { ok: true, changed: typeof data === "number" ? data : 0 };

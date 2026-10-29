@@ -63,28 +63,12 @@ export function HeroActions({
 }
 
 const OPEN = { duration: 0.6, ease: EASE };
-// The glow's entrance: bursts in, then settles to a softer glow.
-const INTRO_SECONDS = 1.5;
-// How long the settled glow stays on after that, then how long it fades.
-const GLOW_HOLD_SECONDS = 3;
-const GLOW_FADE_SECONDS = 0.8;
-const GLOW_SECONDS = INTRO_SECONDS + GLOW_HOLD_SECONDS + GLOW_FADE_SECONDS;
-// Keyframe times in seconds, as fractions of the whole glow.
-const GLOW_TIMES = [
-  0,
-  0.525,
-  0.9,
-  INTRO_SECONDS,
-  INTRO_SECONDS + GLOW_HOLD_SECONDS,
-  GLOW_SECONDS,
-].map((t) => t / GLOW_SECONDS);
 // The row's gap; in a row the opening slot starts by cancelling it, so the
 // other buttons don't jump when the slot is added.
 const ROW_GAP = 16;
 
-// A glowing slot opens up first, sliding the other buttons aside as it
-// widens, then the button materialises in it; the glow settles, stays a few
-// seconds longer, then fades, leaving the turning border.
+// A slot opens up first, sliding the other buttons aside as it widens, then
+// the button materialises in it with a red glow that bursts in and settles.
 function AdminButton() {
   const [inRow] = useState(
     () => window.matchMedia("(min-width: 640px)").matches,
@@ -100,12 +84,9 @@ function AdminButton() {
       <motion.span
         aria-hidden
         initial={{ opacity: 0, scale: 0.2 }}
-        animate={{
-          opacity: [0, 1, 1, 0.45, 0.45, 0],
-          scale: [0.2, 1.15, 1.05, 1, 1, 1],
-        }}
-        transition={{ duration: GLOW_SECONDS, times: GLOW_TIMES, ease: EASE }}
-        className="rainbow-gradient pointer-events-none absolute -inset-2 -z-10 rounded-[1.75rem] blur-xl"
+        animate={{ opacity: [0, 0.9, 0.45], scale: [0.2, 1.1, 1] }}
+        transition={{ duration: 1.5, times: [0, 0.4, 1], ease: EASE }}
+        className="pointer-events-none absolute -inset-1.5 -z-10 rounded-[1.75rem] bg-brand-500 blur-xl"
       />
       <motion.div
         initial={{ opacity: 0, scale: 0.8, filter: "blur(10px)" }}
@@ -120,8 +101,7 @@ function AdminButton() {
           iconSize={24}
           gapClassName="gap-3"
           iconClassName="transition-transform duration-300 group-hover:scale-110"
-          // The 2px glowing border is 1px wider than the others' border.
-          className="group btn btn-rainbow px-[2.1875rem] py-[1.1875rem] text-xl font-bold"
+          className={`${HERO_BUTTON} btn-outline border-brand-300`}
         />
       </motion.div>
     </motion.div>

@@ -70,11 +70,14 @@ function Tear() {
 // booking's status page.
 export function ReservationSlip({
   code,
+  travelDate,
   sentDate,
   form,
   ref,
 }: {
   code: string;
+  // The booking's own day, one of the request's travel dates.
+  travelDate: string;
   // The day the request was sent, as YYYY-MM-DD in Bangkok time.
   sentDate: string;
   form: ReservationInput;
@@ -82,7 +85,7 @@ export function ReservationSlip({
 }) {
   const url = useVerificationUrl(code);
   const rows: [string, string][] = [
-    ["วันเดินทาง", formatThaiDate(form.travelDate)],
+    ["วันเดินทาง", formatThaiDate(travelDate)],
     ["รูปแบบ", tripTypeLabel(form.tripType)],
     ...tripTimeRows(form.tripType, submittedTimes(form)),
     ["ผู้ใช้บริการ", form.name.trim()],

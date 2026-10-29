@@ -11,7 +11,7 @@ import {
 } from "lucide-react";
 import { Collapse } from "@/components/collapse";
 import { EASE } from "@/components/page-transition";
-import { formatThaiDate } from "@/lib/reservation";
+import { formatShortThaiDate, formatThaiDate } from "@/lib/reservation";
 
 const WEEKDAYS = ["อา", "จ", "อ", "พ", "พฤ", "ศ", "ส"];
 const MONTH_NAMES = [
@@ -51,13 +51,13 @@ const monthSlideVariants = {
   enter: (direction: number) => ({ x: direction > 0 ? "100%" : "-100%" }),
   center: {
     x: 0,
-    transition: { type: "spring" as const, stiffness: 300, damping: 28 },
+    transition: { type: "spring" as const, stiffness: 500, damping: 36 },
   },
   exit: (direction: number) => ({
     x: direction > 0 ? "-100%" : "100%",
     // A click during the slide must not pick a day from the outgoing month.
     pointerEvents: "none" as const,
-    transition: { duration: 0.2, ease: "easeIn" as const },
+    transition: { duration: 0.12, ease: "easeIn" as const },
   }),
 };
 
@@ -150,20 +150,21 @@ function MonthCalendar({
   today,
   min = today,
   max,
-  value,
+  selected,
   onSelect,
 }: {
   today: string;
   // Earliest and latest days that can be picked; from today on by default.
   min?: string;
   max?: string;
-  value: string;
+  // The picked days; the calendar opens on the month of the first one.
+  selected: string[];
   onSelect: (date: string) => void;
 }) {
   const current = parseYearMonth(today);
   const first = parseYearMonth(min);
   const [view, setView] = useState<YearMonth>(() =>
-    parseYearMonth(value || today),
+    parseYearMonth(selected[0] || today),
   );
   const [direction, setDirection] = useState(1);
 
@@ -286,7 +287,7 @@ function MonthCalendar({
                 return <div key={cell} className="h-11 sm:h-14" />;
               }
               const date = toKey(view.year, view.month, day);
-              const selected = date === value;
+              const picked = selected.includes(date);
               const isToday = date === today;
               return (
                 <button
@@ -294,10 +295,10 @@ function MonthCalendar({
                   type="button"
                   disabled={date < min || (!!max && date > max)}
                   aria-label={formatThaiDate(date)}
-                  aria-pressed={selected}
+                  aria-pressed={picked}
                   onClick={() => onSelect(date)}
                   className={`h-11 rounded-btn font-display text-lg font-semibold transition-all duration-200 disabled:cursor-not-allowed disabled:opacity-30 sm:h-14 sm:text-xl ${
-                    selected
+                    picked
                       ? "scale-105 bg-brand-600 text-white shadow-[0_8px_20px_-6px_rgb(220_38_38/0.5)]"
                       : isToday
                         ? "border-2 border-brand-300 text-brand-700 hover:bg-brand-50"
@@ -396,12 +397,129 @@ export function DatePicker({
             today={today}
             min={min}
             max={max}
-            value={value}
+            selected={value ? [value] : []}
             onSelect={(date) => {
               onChange(date);
               setOpen(false);
             }}
           />
+        </div>
+      </Collapse>
+    </div>
+  );
+}
+
+// A date field for several days. The calendar stays open while days are
+// picked; picking a day again drops it, as does its chip's remove button.
+export function MultiDatePicker({
+  id,
+  today,
+  max,
+  limit,
+  value,
+  onChange,
+  invalid,
+  placeholder = "เลือกวันเดินทาง",
+}: {
+  id: string;
+  today: string;
+  max?: string;
+  // The most days that can be picked; further picks are ignored.
+  limit: number;
+  // Sorted, as YYYY-MM-DD.
+  value: string[];
+  onChange: (dates: string[]) => void;
+  invalid?: boolean;
+  placeholder?: string;
+}) {
+  const [open, setOpen] = useState(value.length === 0);
+  const full = value.length >= limit;
+
+  function toggle(date: string) {
+    if (value.includes(date)) onChange(value.filter((d) => d !== date));
+    else if (!full) onChange([...value, date].sort());
+  }
+
+  return (
+    <div
+      className={`rounded-2xl border bg-surface transition-colors duration-300 ${
+        invalid
+          ? "border-brand-500"
+          : open
+            ? "border-brand-300"
+            : "border-line-strong"
+      }`}
+    >
+      <button
+        id={id}
+        type="button"
+        aria-expanded={open}
+        aria-controls={`${id}-calendar`}
+        onClick={() => setOpen((current) => !current)}
+        className="flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left transition hover:bg-surface-hover"
+      >
+        <CalendarDays className="size-5 shrink-0 text-brand-600" aria-hidden />
+        <span
+          className={`flex-1 truncate ${value.length ? "font-semibold text-ink" : "text-ink-subtle"}`}
+        >
+          {value.length === 0
+            ? placeholder
+            : value.length === 1
+              ? formatThaiDate(value[0])
+              : `เลือกแล้ว ${value.length} วัน`}
+        </span>
+        <ChevronDown
+          aria-hidden
+          className={`size-5 shrink-0 text-ink-subtle transition-transform duration-300 ${
+            open ? "rotate-180" : ""
+          }`}
+        />
+      </button>
+
+      <Collapse open={value.length > 1}>
+        <ul className="flex flex-wrap gap-2 px-4 pb-3">
+          {value.map((date) => (
+            <li
+              key={date}
+              className="flex items-center gap-1 rounded-full bg-brand-50 py-1 pl-3 pr-1 text-sm font-semibold text-brand-700"
+            >
+              {formatShortThaiDate(date)}
+              <button
+                type="button"
+                aria-label={`เอาวันที่ ${formatThaiDate(date)} ออก`}
+                onClick={() => toggle(date)}
+                className="grid size-6 place-items-center rounded-full transition hover:bg-brand-100"
+              >
+                <X className="size-3.5" aria-hidden />
+              </button>
+            </li>
+          ))}
+        </ul>
+      </Collapse>
+
+      <Collapse open={open} fade={false}>
+        <div id={`${id}-calendar`} className="border-t border-line p-4">
+          <MonthCalendar
+            today={today}
+            max={max}
+            selected={value}
+            onSelect={toggle}
+          />
+          <div className="mt-4 flex items-center justify-between gap-3">
+            <p className="text-sm text-ink-muted">
+              {full
+                ? `เลือกได้สูงสุด ${limit} วัน`
+                : "เลือกได้หลายวัน กดวันที่เลือกแล้วอีกครั้งเพื่อยกเลิก"}
+            </p>
+            <button
+              type="button"
+              disabled={value.length === 0}
+              onClick={() => setOpen(false)}
+              className="btn btn-ghost shrink-0"
+            >
+              เสร็จ
+            </button>
+          </div>
         </div>
       </Collapse>
     </div>

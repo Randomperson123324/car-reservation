@@ -14,6 +14,7 @@ export function Select<T extends string>({
   placeholder = "เลือก",
   clearable,
   invalid,
+  dropUp,
 }: {
   id: string;
   options: readonly T[];
@@ -21,9 +22,11 @@ export function Select<T extends string>({
   // Receives "" only from a `clearable` select.
   onChange: (value: T | "") => void;
   placeholder?: string;
-  // Lets picking the current option again empty the field.
+  // Opens as a filter menu whose first choice, the placeholder, empties it.
   clearable?: boolean;
   invalid?: boolean;
+  // Opens the list above the field, for a field near the bottom of the screen.
+  dropUp?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -67,16 +70,64 @@ export function Select<T extends string>({
           }`}
         />
       </button>
+      {/* A filter opens as a menu like the sort menu, its "all" choice first
+          and a dot by the current one. */}
+      <AnimatePresence>
+        {open && clearable && (
+          <motion.div
+            id={`${id}-options`}
+            role="listbox"
+            initial={{ opacity: 0, y: dropUp ? 6 : -6, scale: 0.97 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: dropUp ? 6 : -6, scale: 0.97 }}
+            transition={{ duration: 0.15, ease: EASE }}
+            className={`absolute inset-x-0 z-20 max-h-72 overflow-y-auto ${
+              dropUp
+                ? "bottom-full mb-2 origin-bottom"
+                : "top-full mt-2 origin-top"
+            } rounded-xl border border-line-strong bg-surface py-2 shadow-card-hover`}
+          >
+            {(["", ...options] as (T | "")[]).map((option) => {
+              const selected = option === value;
+              return (
+                <button
+                  key={option || "all"}
+                  type="button"
+                  role="option"
+                  aria-selected={selected}
+                  onClick={() => {
+                    if (!selected) onChange(option);
+                    setOpen(false);
+                  }}
+                  className={`flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors hover:bg-surface-hover ${
+                    selected ? "font-semibold text-brand-700" : "text-ink"
+                  }`}
+                >
+                  <span
+                    aria-hidden
+                    className={`size-1.5 shrink-0 rounded-full ${
+                      selected ? "bg-current" : ""
+                    }`}
+                  />
+                  {option || placeholder}
+                </button>
+              );
+            })}
+          </motion.div>
+        )}
+      </AnimatePresence>
       {/* The outer element animates its height; the inner one owns the scroll
           cap, so a long list still scrolls once fully expanded. */}
       <AnimatePresence>
-        {open && (
+        {open && !clearable && (
           <motion.div
             initial={{ height: 0 }}
             animate={{ height: "auto" }}
             exit={{ height: 0 }}
             transition={{ duration: 0.25, ease: EASE }}
-            className="absolute inset-x-0 top-full z-20 mt-2 overflow-hidden rounded-xl border border-line-strong bg-surface shadow-card-hover"
+            className={`absolute inset-x-0 z-20 overflow-hidden ${
+              dropUp ? "bottom-full mb-2" : "top-full mt-2"
+            } rounded-xl border border-line-strong bg-surface shadow-card-hover`}
           >
             <div
               id={`${id}-options`}
@@ -93,7 +144,6 @@ export function Select<T extends string>({
                     aria-selected={selected}
                     onClick={() => {
                       if (!selected) onChange(option);
-                      else if (clearable) onChange("");
                       setOpen(false);
                     }}
                     className={`flex w-full items-center justify-between gap-3 px-4 py-2.5 text-left transition-colors ${

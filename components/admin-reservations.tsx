@@ -1,35 +1,57 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import Link from "next/link";
 import { AnimatePresence, motion } from "framer-motion";
 import {
+  CarFront,
   Check,
   CheckSquare,
   Filter,
   NotebookPen,
   Phone,
   Search,
+  Settings,
   UserRound,
   Users,
   X,
 } from "lucide-react";
-import { setReservationStatuses, type AdminDecision } from "@/app/actions";
-import { AdminActions } from "@/components/admin-actions";
+import {
+  setReservationStatuses,
+  type AdminDecision,
+  type Assignment,
+} from "@/app/actions";
+import {
+  AdminActions,
+  AssignmentFields,
+  FleetProvider,
+  NO_ASSIGNMENT,
+  useFleet,
+  type Fleet,
+} from "@/components/admin-actions";
 import { Collapse } from "@/components/collapse";
-import { DatePicker } from "@/components/date-picker";
 import { EASE } from "@/components/page-transition";
 import { ReservationCard } from "@/components/reservation-card";
+import { DatePicker } from "@/components/date-picker";
 import { Select } from "@/components/select";
+import {
+  ICON_BUTTON,
+  SortOptions,
+  ToolbarMenu,
+} from "@/components/toolbar-menu";
 import {
   ADMIN_FILTERS,
   PROVINCES,
   REJECT_REASON_MAX,
   STATUS_LABELS,
   TRIP_TYPES,
+  sortReservations,
   tripTypeLabel,
+  vehicleLabel,
   type AdminFilter,
   type AdminReservation,
   type Province,
+  type SortOrder,
 } from "@/lib/reservation";
 
 const SPRING = { type: "spring", stiffness: 300, damping: 30 } as const;
@@ -40,26 +62,13 @@ const slideVariants = {
   enter: (direction: number) => ({ x: direction > 0 ? "100%" : "-100%" }),
   center: {
     x: 0,
-    transition: { type: "spring" as const, stiffness: 300, damping: 28 },
+    transition: { type: "spring" as const, stiffness: 500, damping: 36 },
   },
   exit: (direction: number) => ({
     x: direction > 0 ? "-100%" : "100%",
-    transition: { duration: 0.2, ease: "easeIn" as const },
+    transition: { duration: 0.12, ease: "easeIn" as const },
   }),
 };
-
-// Opens like the other collapsible panels, but lets the dropdowns inside
-// spill out once it is open.
-const panelMotion = {
-  initial: { height: 0, opacity: 0, overflow: "hidden" },
-  animate: {
-    height: "auto",
-    opacity: 1,
-    transitionEnd: { overflow: "visible" },
-  },
-  exit: { height: 0, opacity: 0, overflow: "hidden" },
-  transition: { duration: 0.3, ease: EASE },
-} as const;
 
 const SUBMITTED_AT = new Intl.DateTimeFormat("th-TH", {
   dateStyle: "medium",
@@ -112,22 +121,26 @@ export function AdminReservations({
   items,
   initialFilter,
   today,
+  fleet,
 }: {
   items: AdminReservation[];
   initialFilter: AdminFilter;
   today: string;
+  fleet: Fleet;
 }) {
   const [tab, setTab] = useState<AdminFilter>(initialFilter);
   const [direction, setDirection] = useState(1);
-  const [filtersOpen, setFiltersOpen] = useState(false);
   const [filters, setFilters] = useState<Filters>(NO_FILTERS);
+  const [sort, setSort] = useState<SortOrder>("วันเดินทาง");
   const [selecting, setSelecting] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(() => new Set());
   const [bulkError, setBulkError] = useState("");
   const [bulkPending, startBulk] = useTransition();
   const [deciding, setDeciding] = useState<AdminDecision | null>(null);
-  const [bulkRejecting, setBulkRejecting] = useState(false);
+  const [bulkMode, setBulkMode] = useState<AdminDecision | null>(null);
   const [bulkReason, setBulkReason] = useState("");
+  const [bulkAssignment, setBulkAssignment] =
+    useState<Assignment>(NO_ASSIGNMENT);
 
   function selectTab(next: AdminFilter) {
     if (next === tab) return;
@@ -148,7 +161,10 @@ export function AdminReservations({
     (key) => filters[key].trim() !== "",
   ).length;
 
-  const filtered = items.filter((item) => matches(item, filters));
+  const filtered = sortReservations(
+    items.filter((item) => matches(item, filters)),
+    sort,
+  );
   // The calendars reach back to the earliest booking, not just today.
   const earliest = items.reduce(
     (min, r) => (r.travel_date < min ? r.travel_date : min),
@@ -192,7 +208,7 @@ export function AdminReservations({
     setSelecting(false);
     setSelected(new Set());
     setBulkError("");
-    setBulkRejecting(false);
+    setBulkMode(null);
     setBulkReason("");
   }
 
@@ -204,6 +220,7 @@ export function AdminReservations({
         picked.map((r) => r.code),
         decision,
         bulkReason,
+        bulkAssignment,
       );
       setDeciding(null);
       if (!result.ok) {
@@ -211,7 +228,7 @@ export function AdminReservations({
         return;
       }
       setSelected(new Set());
-      setBulkRejecting(false);
+      setBulkMode(null);
       setBulkReason("");
     });
   }
@@ -221,75 +238,35 @@ export function AdminReservations({
   );
 
   return (
-    <>
-      <div className="mb-3 flex flex-wrap items-center justify-end gap-2">
-        <p className="mr-auto text-ink-muted">
-          {activeFilters > 0
-            ? `พบ ${filtered.length} จาก ${items.length} รายการ`
-            : `ทั้งหมด ${items.length} รายการ`}
-        </p>
-        <button
-          type="button"
-          aria-expanded={filtersOpen}
-          aria-controls="admin-filters"
-          onClick={() => setFiltersOpen((open) => !open)}
-          className={`btn px-4 py-2 text-base ${
-            filtersOpen || activeFilters > 0
-              ? "border border-brand-200 bg-brand-50 text-brand-700"
-              : "btn-outline"
-          }`}
+    <FleetProvider value={fleet}>
+      <div className="relative mb-3 flex items-center gap-2">
+        <div className="relative min-w-0 flex-1">
+          <Search
+            size={18}
+            aria-hidden
+            className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-subtle"
+          />
+          <input
+            id="filter-query"
+            type="search"
+            aria-label="ค้นหา"
+            placeholder="รหัสการจอง ชื่อ เบอร์ติดต่อ หรือสถานที่"
+            value={filters.query}
+            onChange={(e) => setFilter("query", e.target.value)}
+            className="field h-11 py-0 pl-10"
+          />
+        </div>
+        <ToolbarMenu
+          id="admin-filters"
+          icon={Filter}
+          label="ตัวกรอง"
+          active={activeFilters > 0}
+          badge={activeFilters}
+          align="right"
         >
-          <Filter size={18} aria-hidden />
-          ตัวกรอง
-          {activeFilters > 0 && (
-            <span className="rounded-full bg-brand-600 px-2 text-sm text-white">
-              {activeFilters}
-            </span>
-          )}
-        </button>
-        <button
-          type="button"
-          aria-pressed={selecting}
-          onClick={() => (selecting ? stopSelecting() : setSelecting(true))}
-          className={`btn px-4 py-2 text-base ${
-            selecting
-              ? "border border-brand-200 bg-brand-50 text-brand-700"
-              : "btn-outline"
-          }`}
-        >
-          {selecting ? (
-            <X size={18} aria-hidden />
-          ) : (
-            <CheckSquare size={18} aria-hidden />
-          )}
-          {selecting ? "ยกเลิกการเลือก" : "เลือก"}
-        </button>
-      </div>
-
-      <AnimatePresence initial={false}>
-        {filtersOpen && (
-          <motion.div id="admin-filters" key="filters" {...panelMotion}>
-            <div className="card mb-4 grid items-start gap-4 rounded-2xl p-5 sm:grid-cols-2">
-              <div className="sm:col-span-2">
-                <label htmlFor="filter-query" className="font-semibold text-ink">
-                  ค้นหา
-                </label>
-                <div className="relative mt-2">
-                  <Search
-                    size={18}
-                    aria-hidden
-                    className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-subtle"
-                  />
-                  <input
-                    id="filter-query"
-                    type="search"
-                    placeholder="รหัสการจอง ชื่อ เบอร์ติดต่อ หรือสถานที่"
-                    value={filters.query}
-                    onChange={(e) => setFilter("query", e.target.value)}
-                    className="field pl-10"
-                  />
-                </div>
-              </div>
+          {() => (
+            <div className="grid gap-4 p-5 sm:w-96">
+              <SortOptions id="admin-sort" value={sort} onChange={setSort} />
               <div>
                 <label
                   htmlFor="filter-province"
@@ -359,7 +336,7 @@ export function AdminReservations({
                 </div>
               </div>
               {activeFilters > 0 && (
-                <div className="flex justify-end sm:col-span-2">
+                <div className="flex justify-end">
                   <button
                     type="button"
                     onClick={() => setFilters(NO_FILTERS)}
@@ -371,14 +348,46 @@ export function AdminReservations({
                 </div>
               )}
             </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+          )}
+        </ToolbarMenu>
+        <button
+          type="button"
+          aria-pressed={selecting}
+          aria-label={selecting ? "ยกเลิกการเลือก" : "เลือก"}
+          title={selecting ? "ยกเลิกการเลือก" : "เลือก"}
+          onClick={() => (selecting ? stopSelecting() : setSelecting(true))}
+          className={`${ICON_BUTTON} ${
+            selecting
+              ? "border-brand-200 bg-brand-50 text-brand-700"
+              : "border-line-strong text-ink-muted hover:bg-surface-hover hover:text-ink"
+          }`}
+        >
+          {selecting ? (
+            <X size={20} aria-hidden />
+          ) : (
+            <CheckSquare size={20} aria-hidden />
+          )}
+        </button>
+        <Link
+          href="/admin/settings"
+          aria-label="ตั้งค่ารถและคนขับ"
+          title="ตั้งค่ารถและคนขับ"
+          className={`${ICON_BUTTON} border-line-strong text-ink-muted hover:bg-surface-hover hover:text-ink`}
+        >
+          <Settings size={20} aria-hidden />
+        </Link>
+      </div>
+      <p className="mb-4 text-ink-muted">
+        {activeFilters > 0
+          ? `พบ ${filtered.length} จาก ${items.length} รายการ`
+          : `ทั้งหมด ${items.length} รายการ`}
+      </p>
 
       <div
         role="tablist"
         aria-label="กรองตามสถานะ"
-        className="mb-5 flex flex-wrap gap-2 rounded-xl bg-surface-muted p-1.5"
+        // One row that scrolls sideways on a phone instead of wrapping.
+        className="mb-5 flex gap-1 overflow-x-auto rounded-xl bg-surface-muted p-1.5 [scrollbar-width:none] sm:gap-2 [&::-webkit-scrollbar]:hidden"
       >
         {ADMIN_FILTERS.map((f) => (
           <button
@@ -386,8 +395,15 @@ export function AdminReservations({
             type="button"
             role="tab"
             aria-selected={tab === f}
-            onClick={() => selectTab(f)}
-            className={`relative isolate inline-flex flex-1 items-center justify-center gap-2 whitespace-nowrap rounded-lg px-3 py-2 font-semibold transition-colors duration-300 ${
+            onClick={(e) => {
+              selectTab(f);
+              e.currentTarget.scrollIntoView({
+                behavior: "smooth",
+                block: "nearest",
+                inline: "nearest",
+              });
+            }}
+            className={`relative isolate inline-flex shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg px-3 py-2 font-semibold sm:flex-1 sm:gap-2 transition-colors duration-300 ${
               tab === f ? "text-white" : "text-ink-muted hover:text-ink"
             }`}
           >
@@ -435,8 +451,8 @@ export function AdminReservations({
                 {/* A booking whose new status leaves this tab shrinks away. */}
                 <AnimatePresence initial={false}>
                   {shown.map((item) => {
-                    const canPick = selecting && item.status !== "cancelled";
-                    const isPicked = canPick && selected.has(item.code);
+                    const pickable = selecting && item.status !== "cancelled";
+                    const isPicked = pickable && selected.has(item.code);
                     return (
                       <motion.li
                         key={item.code}
@@ -448,8 +464,10 @@ export function AdminReservations({
                         }}
                         transition={{ duration: 0.3 }}
                         // In select mode the whole card ticks its box.
-                        onClick={canPick ? () => toggle(item.code) : undefined}
-                        className={`flex items-start ${canPick ? "cursor-pointer" : ""}`}
+                        onClick={pickable ? () => toggle(item.code) : undefined}
+                        className={`flex items-start ${
+                          pickable ? "cursor-pointer" : ""
+                        }`}
                       >
                         <AnimatePresence initial={false}>
                           {selecting && (
@@ -465,7 +483,7 @@ export function AdminReservations({
                                 <input
                                   type="checkbox"
                                   aria-label={`เลือกการจอง ${item.code}`}
-                                  disabled={!canPick}
+                                  disabled={!pickable}
                                   checked={isPicked}
                                   onClick={(e) => e.stopPropagation()}
                                   onChange={() => toggle(item.code)}
@@ -525,34 +543,57 @@ export function AdminReservations({
                 </span>
               )}
               <div className="ml-auto flex gap-2">
-                {bulkRejecting ? (
+                {bulkMode ? (
                   <>
                     <button
                       type="button"
                       disabled={bulkPending}
                       onClick={() => {
-                        setBulkRejecting(false);
+                        setBulkMode(null);
                         setBulkError("");
                       }}
                       className="btn btn-ghost px-4 py-2 text-base"
                     >
                       ยกเลิก
                     </button>
-                    <button
-                      type="button"
-                      disabled={
-                        picked.length === 0 || bulkPending || !bulkReason.trim()
-                      }
-                      onClick={() => decideAll("rejected")}
-                      className="btn btn-primary px-4 py-2 text-base"
-                    >
-                      {deciding === "rejected" ? (
-                        spinner
-                      ) : (
-                        <X size={18} aria-hidden />
-                      )}
-                      ยืนยันไม่อนุมัติ
-                    </button>
+                    {bulkMode === "rejected" ? (
+                      <button
+                        type="button"
+                        disabled={
+                          picked.length === 0 ||
+                          bulkPending ||
+                          !bulkReason.trim()
+                        }
+                        onClick={() => decideAll("rejected")}
+                        className="btn btn-primary px-4 py-2 text-base"
+                      >
+                        {deciding === "rejected" ? (
+                          spinner
+                        ) : (
+                          <X size={18} aria-hidden />
+                        )}
+                        ยืนยันไม่อนุมัติ
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        disabled={
+                          picked.length === 0 ||
+                          bulkPending ||
+                          !bulkAssignment.vehicleId ||
+                          !bulkAssignment.driverId
+                        }
+                        onClick={() => decideAll("approved")}
+                        className="btn bg-green-600 px-4 py-2 text-base text-white hover:-translate-y-px hover:bg-green-700"
+                      >
+                        {deciding === "approved" ? (
+                          spinner
+                        ) : (
+                          <Check size={18} aria-hidden />
+                        )}
+                        ยืนยันอนุมัติ
+                      </button>
+                    )}
                   </>
                 ) : (
                   <>
@@ -560,7 +601,7 @@ export function AdminReservations({
                       type="button"
                       disabled={picked.length === 0 || bulkPending}
                       onClick={() => {
-                        setBulkRejecting(true);
+                        setBulkMode("rejected");
                         setBulkError("");
                       }}
                       className="btn btn-outline px-4 py-2 text-base"
@@ -571,20 +612,29 @@ export function AdminReservations({
                     <button
                       type="button"
                       disabled={picked.length === 0 || bulkPending}
-                      onClick={() => decideAll("approved")}
+                      onClick={() => {
+                        setBulkMode("approved");
+                        setBulkError("");
+                      }}
                       className="btn bg-green-600 px-4 py-2 text-base text-white hover:-translate-y-px hover:bg-green-700"
                     >
-                      {deciding === "approved" ? (
-                        spinner
-                      ) : (
-                        <Check size={18} aria-hidden />
-                      )}
+                      <Check size={18} aria-hidden />
                       อนุมัติ
                     </button>
                   </>
                 )}
               </div>
-              <Collapse open={bulkRejecting} className="w-full">
+              <Collapse open={bulkMode === "approved"} spill className="w-full">
+                <div className="-mx-1 px-1 pb-1 pt-1">
+                  <AssignmentFields
+                    id="bulk-assign"
+                    value={bulkAssignment}
+                    onChange={setBulkAssignment}
+                    dropUp
+                  />
+                </div>
+              </Collapse>
+              <Collapse open={bulkMode === "rejected"} className="w-full">
                 <div className="-mx-1 px-1 pb-1 pt-1">
                   <label htmlFor="bulk-reject" className="sr-only">
                     หมายเหตุที่ไม่อนุมัติ
@@ -606,7 +656,7 @@ export function AdminReservations({
       </AnimatePresence>
       {/* Room for the docked bar, so it never covers the last booking. */}
       {selecting && <div aria-hidden className="h-24" />}
-    </>
+    </FleetProvider>
   );
 }
 
@@ -626,54 +676,107 @@ function AdminReservationCard({
       }`}
     >
       <ReservationCard item={item} />
-      <dl className="mt-3 grid gap-2 border-t border-line pt-3 text-ink-muted sm:grid-cols-2">
-        <div className="flex items-center gap-2">
-          <UserRound size={16} className="text-brand-600" aria-hidden />
-          <dt className="sr-only">ผู้ขอใช้รถ</dt>
-          <dd className="text-ink">
-            {item.requester_name}
-            {item.department && (
-              <span className="text-ink-muted"> · {item.department}</span>
-            )}
-          </dd>
-        </div>
-        <div className="flex items-center gap-2">
-          <Phone size={16} className="text-brand-600" aria-hidden />
-          <dt className="sr-only">เบอร์ติดต่อ</dt>
-          <dd>
-            <a
-              href={`tel:${item.phone}`}
-              className="text-ink underline-offset-2 hover:underline"
-            >
-              {item.phone}
-            </a>
-          </dd>
-        </div>
-        <div className="flex items-center gap-2">
-          <Users size={16} className="text-brand-600" aria-hidden />
-          <dt className="sr-only">จำนวนผู้โดยสาร</dt>
-          <dd>{item.passengers} คน</dd>
-        </div>
-        <div className="flex items-center gap-2 text-sm">
-          <dt>ส่งคำขอเมื่อ</dt>
-          <dd>{SUBMITTED_AT.format(new Date(item.created_at))}</dd>
-        </div>
-        {item.note && (
-          <div className="flex items-start gap-2 sm:col-span-2">
-            <NotebookPen
-              size={16}
-              className="mt-1 shrink-0 text-brand-600"
-              aria-hidden
-            />
-            <dt className="sr-only">หมายเหตุ</dt>
-            <dd className="break-words">{item.note}</dd>
-          </div>
-        )}
-      </dl>
+      <AssignedLine item={item} />
+      <RequesterDetails item={item} />
       {/* While selecting, decisions go through the bar at the bottom. */}
       {!selecting && item.status !== "cancelled" && (
-        <AdminActions code={item.code} status={item.status} />
+        <AdminActions
+          codes={[item.code]}
+          statuses={[item.status]}
+          assigned={assignedOf(item)}
+        />
       )}
     </div>
+  );
+}
+
+function assignedOf(item: AdminReservation): Assignment | undefined {
+  return item.vehicle_id && item.driver_id
+    ? { vehicleId: item.vehicle_id, driverId: item.driver_id }
+    : undefined;
+}
+
+// The car and driver an approved booking was given.
+function AssignedLine({ item }: { item: AdminReservation }) {
+  const { vehicles, drivers } = useFleet();
+  if (item.status !== "approved") return null;
+  const vehicle = vehicles.find((v) => v.id === item.vehicle_id);
+  const driver = drivers.find((d) => d.id === item.driver_id);
+  return (
+    <p className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-xl border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-800">
+      <CarFront size={16} aria-hidden />
+      {vehicle || driver ? (
+        <>
+          <span className="font-semibold">
+            {vehicle ? vehicleLabel(vehicle) : "ยังไม่ระบุรถ"}
+          </span>
+          <span aria-hidden>·</span>
+          <span className="inline-flex items-center gap-1">
+            <UserRound size={14} aria-hidden />
+            {driver?.name ?? "ยังไม่ระบุคนขับ"}
+            {driver?.phone && (
+              <a
+                href={`tel:${driver.phone}`}
+                className="underline-offset-2 hover:underline"
+              >
+                ({driver.phone})
+              </a>
+            )}
+          </span>
+        </>
+      ) : (
+        "อนุมัติก่อนมีการระบุรถและคนขับ"
+      )}
+    </p>
+  );
+}
+
+// Who asked and how to reach them.
+function RequesterDetails({ item }: { item: AdminReservation }) {
+  return (
+    <dl className="mt-3 grid gap-2 border-t border-line pt-3 text-ink-muted sm:grid-cols-2">
+      <div className="flex items-center gap-2">
+        <UserRound size={16} className="text-brand-600" aria-hidden />
+        <dt className="sr-only">ผู้ขอใช้รถ</dt>
+        <dd className="text-ink">
+          {item.requester_name}
+          {item.department && (
+            <span className="text-ink-muted"> · {item.department}</span>
+          )}
+        </dd>
+      </div>
+      <div className="flex items-center gap-2">
+        <Phone size={16} className="text-brand-600" aria-hidden />
+        <dt className="sr-only">เบอร์ติดต่อ</dt>
+        <dd>
+          <a
+            href={`tel:${item.phone}`}
+            className="text-ink underline-offset-2 hover:underline"
+          >
+            {item.phone}
+          </a>
+        </dd>
+      </div>
+      <div className="flex items-center gap-2">
+        <Users size={16} className="text-brand-600" aria-hidden />
+        <dt className="sr-only">จำนวนผู้โดยสาร</dt>
+        <dd>{item.passengers} คน</dd>
+      </div>
+      <div className="flex items-center gap-2 text-sm">
+        <dt>ส่งคำขอเมื่อ</dt>
+        <dd>{SUBMITTED_AT.format(new Date(item.created_at))}</dd>
+      </div>
+      {item.note && (
+        <div className="flex items-start gap-2 sm:col-span-2">
+          <NotebookPen
+            size={16}
+            className="mt-1 shrink-0 text-brand-600"
+            aria-hidden
+          />
+          <dt className="sr-only">หมายเหตุ</dt>
+          <dd className="break-words">{item.note}</dd>
+        </div>
+      )}
+    </dl>
   );
 }

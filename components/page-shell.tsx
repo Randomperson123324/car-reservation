@@ -12,6 +12,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { Navbar } from "@/components/navbar";
+import { UpdateLog } from "@/components/update-log";
 import { getSessionUser } from "@/lib/auth";
 import footerLogo from "@/public/footer-logo.png";
 
@@ -23,7 +24,10 @@ export function Footer() {
         alt="Srisavarindhira"
         className="h-auto w-44 object-contain opacity-70"
       />
-      <p className="text-center text-sm text-ink-subtle">ระบบจองรถสถาบัน</p>
+      <div className="flex flex-col items-center gap-1">
+        <p className="text-center text-sm text-ink-subtle">ระบบจองรถสถาบัน</p>
+        <UpdateLog />
+      </div>
     </footer>
   );
 }

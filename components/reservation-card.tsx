@@ -14,6 +14,29 @@ const STATUS_STYLES: Record<string, string> = {
   cancelled: "bg-surface-muted text-ink-muted border-line-strong",
 };
 
+export function StatusBadge({ status }: { status: string }) {
+  return (
+    <span
+      className={`shrink-0 rounded-full border px-3 py-1 text-sm font-semibold ${
+        STATUS_STYLES[status] ?? STATUS_STYLES.cancelled
+      }`}
+    >
+      {STATUS_LABELS[status] ?? status}
+    </span>
+  );
+}
+
+// A booking's times on one line, e.g. "ออกเดินทาง 08:30 น. · กลับ 16:00 น.".
+export function tripTimesText(item: ReservationSummary) {
+  return tripTimeRows(item.trip_type, {
+    departTime: item.depart_time,
+    arriveTime: item.arrive_time,
+    returnTime: item.return_time,
+  })
+    .map(([label, time]) => `${label.replace(/^เวลา/, "")} ${time}`)
+    .join(" · ");
+}
+
 // The body of one reservation: code, status, destination and trip details.
 export function ReservationCard({ item }: { item: ReservationSummary }) {
   return (
@@ -22,13 +45,7 @@ export function ReservationCard({ item }: { item: ReservationSummary }) {
         <span className="font-mono text-sm font-semibold tracking-wider text-ink-muted">
           {item.code}
         </span>
-        <span
-          className={`rounded-full border px-3 py-1 text-sm font-semibold ${
-            STATUS_STYLES[item.status] ?? STATUS_STYLES.cancelled
-          }`}
-        >
-          {STATUS_LABELS[item.status] ?? item.status}
-        </span>
+        <StatusBadge status={item.status} />
       </div>
       <h3 className="mt-3 break-words text-xl text-ink">{item.destination}</h3>
       <dl className="mt-3 grid gap-2 text-ink-muted sm:grid-cols-2">
@@ -40,15 +57,7 @@ export function ReservationCard({ item }: { item: ReservationSummary }) {
         <div className="flex items-center gap-2">
           <Clock size={16} className="text-brand-600" aria-hidden />
           <dt className="sr-only">เวลา</dt>
-          <dd>
-            {tripTimeRows(item.trip_type, {
-              departTime: item.depart_time,
-              arriveTime: item.arrive_time,
-              returnTime: item.return_time,
-            })
-              .map(([label, time]) => `${label.replace(/^เวลา/, "")} ${time}`)
-              .join(" · ")}
-          </dd>
+          <dd>{tripTimesText(item)}</dd>
         </div>
         <div className="flex items-center gap-2 sm:col-span-2">
           <MapPin size={16} className="text-brand-600" aria-hidden />

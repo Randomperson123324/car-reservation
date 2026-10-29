@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
 import { lookupReservationByCode } from "@/app/actions";
+import { Reveal, SkeletonSwap } from "@/components/skeleton-swap";
+import { ReservationCardSkeleton } from "@/components/skeletons";
 import { PageHero, PageShell } from "@/components/page-shell";
 import { ReservationCard } from "@/components/reservation-card";
 import { normalizeCode } from "@/lib/reservation";
@@ -24,9 +26,13 @@ export default function ReservationPage({
         subtitle="สถานะล่าสุดของการจองรถตามรหัสการจอง"
       />
       <main className="mx-auto w-full max-w-4xl flex-1 px-4 pb-16 pt-2 sm:px-6">
-        <Suspense fallback={<StatusSkeleton />}>
-          <Status params={params} />
-        </Suspense>
+        <SkeletonSwap skeleton={<ReservationCardSkeleton />}>
+          <Suspense fallback={null}>
+            <Reveal>
+              <Status params={params} />
+            </Reveal>
+          </Suspense>
+        </SkeletonSwap>
         <div className="mt-6 text-center">
           <Link href="/check" className="btn btn-outline">
             ค้นหาการจองอื่น
@@ -60,19 +66,6 @@ async function Status({ params }: { params: Promise<{ code: string }> }) {
           หรือค้นหาด้วยเบอร์ติดต่อ
         </p>
       )}
-    </div>
-  );
-}
-
-function StatusSkeleton() {
-  return (
-    <div className="card space-y-3 rounded-2xl p-5" aria-hidden>
-      <div className="flex justify-between">
-        <div className="skeleton h-5 w-24 rounded" />
-        <div className="skeleton h-6 w-24 rounded-full" />
-      </div>
-      <div className="skeleton h-6 w-1/2 rounded" />
-      <div className="skeleton h-4 w-3/4 rounded" />
     </div>
   );
 }

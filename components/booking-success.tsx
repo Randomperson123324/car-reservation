@@ -8,9 +8,11 @@ import { Collapse } from "@/components/collapse";
 import { EASE, TransitionLink } from "@/components/page-transition";
 import { ReservationSlip } from "@/components/reservation-slip";
 import {
-  formatThaiDate,
+  formatShortThaiDate,
+  formatTravelDates,
   submittedTimes,
   tripTimeRows,
+  type BookedDay,
   type ReservationInput,
 } from "@/lib/reservation";
 
@@ -24,15 +26,19 @@ function printFeed(progress: number) {
 }
 
 export function BookingSuccess({
-  code,
+  bookings,
   sentDate,
   form,
 }: {
-  code: string;
+  // One per travel day, in date order.
+  bookings: BookedDay[];
   sentDate: string;
   form: ReservationInput;
 }) {
   const slipRef = useRef<HTMLDivElement>(null);
+  // The booking whose slip is shown, downloaded and checked.
+  const [shown, setShown] = useState(0);
+  const { code, travelDate } = bookings[shown];
   const [printed, setPrinted] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState(false);
@@ -94,15 +100,49 @@ export function BookingSuccess({
             เจ้าหน้าที่จะตรวจสอบและติดต่อกลับตามเบอร์ที่ให้ไว้
           </p>
 
-          <div className="mx-auto mt-8 max-w-xs rounded-2xl border border-dashed border-brand-300 bg-brand-50 px-6 py-5">
-            <p className="text-sm text-brand-700">รหัสการจอง</p>
-            <p className="mt-1 font-mono text-3xl font-bold tracking-widest text-brand-700">
-              {code}
-            </p>
-          </div>
+          {bookings.length === 1 ? (
+            <div className="mx-auto mt-8 max-w-xs rounded-2xl border border-dashed border-brand-300 bg-brand-50 px-6 py-5">
+              <p className="text-sm text-brand-700">รหัสการจอง</p>
+              <p className="mt-1 font-mono text-3xl font-bold tracking-widest text-brand-700">
+                {code}
+              </p>
+            </div>
+          ) : (
+            <div className="mx-auto mt-8 max-w-sm rounded-2xl border border-dashed border-brand-300 bg-brand-50 p-4">
+              <p className="text-sm text-brand-700">
+                รหัสการจอง {bookings.length} รายการ แยกตามวันเดินทาง
+              </p>
+              <ul className="mt-3 space-y-1.5">
+                {bookings.map((booking, index) => (
+                  <li key={booking.code}>
+                    <button
+                      type="button"
+                      aria-pressed={index === shown}
+                      onClick={() => setShown(index)}
+                      className={`flex w-full items-center justify-between gap-3 rounded-xl px-4 py-2 text-left transition ${
+                        index === shown
+                          ? "bg-brand-600 text-white"
+                          : "text-brand-700 hover:bg-brand-100"
+                      }`}
+                    >
+                      <span className="text-sm font-semibold">
+                        {formatShortThaiDate(booking.travelDate)}
+                      </span>
+                      <span className="font-mono text-lg font-bold tracking-widest">
+                        {booking.code}
+                      </span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+              <p className="mt-3 text-xs text-brand-700">
+                กดที่รายการเพื่อดูสลิปของวันนั้น
+              </p>
+            </div>
+          )}
 
           <p className="mt-6 text-sm text-ink-muted">
-            {formatThaiDate(form.travelDate)} ·{" "}
+            {formatTravelDates(form.travelDates)} ·{" "}
             {tripTimeRows(form.tripType, submittedTimes(form))[0]?.[1]} ·{" "}
             {form.destination.trim()}
           </p>
@@ -128,6 +168,7 @@ export function BookingSuccess({
             <ReservationSlip
               ref={slipRef}
               code={code}
+              travelDate={travelDate}
               sentDate={sentDate}
               form={form}
             />

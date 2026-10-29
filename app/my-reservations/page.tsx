@@ -1,17 +1,16 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { Suspense } from "react";
-import { CancelReservation } from "@/components/cancel-reservation";
 import { StartBookingLink } from "@/components/cta";
+import { MyReservationList } from "@/components/my-reservation-list";
 import { PageHero, PageShell } from "@/components/page-shell";
-import { ReservationCard } from "@/components/reservation-card";
+import { Reveal, SkeletonSwap } from "@/components/skeleton-swap";
+import { ReservationListSkeleton } from "@/components/skeletons";
 import { getSessionUser } from "@/lib/auth";
-import type { ReservationSummary } from "@/lib/reservation";
+import { bangkokToday, type ReservationSummary } from "@/lib/reservation";
 import { getSupabaseAuth } from "@/lib/supabase";
 
 export const metadata: Metadata = { title: "การจองของฉัน" };
-
-const CANCELLABLE = ["pending", "approved"];
 
 // The page frame is static; the signed-in user's bookings are read per
 // request and stream in.
@@ -24,9 +23,13 @@ export default function MyReservationsPage() {
         subtitle="รายการจองรถทั้งหมดที่คุณส่งไว้ พร้อมสถานะล่าสุด"
       />
       <main className="mx-auto w-full max-w-4xl flex-1 px-4 pb-16 pt-2 sm:px-6">
-        <Suspense fallback={<ListSkeleton />}>
-          <List />
-        </Suspense>
+        <SkeletonSwap skeleton={<ReservationListSkeleton />}>
+          <Suspense fallback={null}>
+            <Reveal>
+              <List />
+            </Reveal>
+          </Suspense>
+        </SkeletonSwap>
       </main>
     </PageShell>
   );
@@ -43,7 +46,7 @@ async function List() {
     ? await supabase
         .from("reservations")
         .select(
-          "code, travel_date, trip_type, depart_time, arrive_time, return_time, province, destination, status, reject_reason",
+          "code, travel_date, trip_type, depart_time, arrive_time, return_time, province, destination, status, reject_reason, created_at",
         )
         .eq("user_id", user.id)
         .order("travel_date", { ascending: false })
@@ -52,7 +55,7 @@ async function List() {
     : { data: null, error: null };
   if (error) console.error("my reservations failed", error);
 
-  const items = (data ?? []) as ReservationSummary[];
+  const items = (data ?? []) as (ReservationSummary & { created_at: string })[];
 
   if (!data || items.length === 0) {
     return (
@@ -74,36 +77,5 @@ async function List() {
     );
   }
 
-  return (
-    <ul className="space-y-3">
-      {items.map((item) => (
-        <li
-          key={item.code}
-          className="card animate-fade-up rounded-2xl p-5 transition-shadow duration-200 hover:shadow-card-hover"
-        >
-          <ReservationCard item={item} />
-          {CANCELLABLE.includes(item.status) && (
-            <CancelReservation code={item.code} />
-          )}
-        </li>
-      ))}
-    </ul>
-  );
-}
-
-function ListSkeleton() {
-  return (
-    <div className="space-y-3" aria-hidden>
-      {[1, 2].map((i) => (
-        <div key={i} className="card space-y-3 rounded-2xl p-5">
-          <div className="flex justify-between">
-            <div className="skeleton h-5 w-24 rounded" />
-            <div className="skeleton h-6 w-24 rounded-full" />
-          </div>
-          <div className="skeleton h-6 w-1/2 rounded" />
-          <div className="skeleton h-4 w-3/4 rounded" />
-        </div>
-      ))}
-    </div>
-  );
+  return <MyReservationList items={items} today={bangkokToday()} />;
 }

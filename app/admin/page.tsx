@@ -3,12 +3,16 @@ import { redirect } from "next/navigation";
 import { Suspense } from "react";
 import { AdminReservations } from "@/components/admin-reservations";
 import { PageHero, PageShell } from "@/components/page-shell";
+import { Reveal, SkeletonSwap } from "@/components/skeleton-swap";
+import { ReservationListSkeleton } from "@/components/skeletons";
 import { getSessionUser } from "@/lib/auth";
 import {
   ADMIN_FILTERS,
   bangkokToday,
   type AdminFilter,
   type AdminReservation,
+  type Driver,
+  type Vehicle,
 } from "@/lib/reservation";
 import { getSupabaseAuth } from "@/lib/supabase";
 
@@ -25,9 +29,13 @@ export default function AdminPage({ searchParams }: PageProps<"/admin">) {
         subtitle="ตรวจสอบคำขอจองรถ และอนุมัติหรือไม่อนุมัติการจอง"
       />
       <main className="mx-auto w-full max-w-4xl flex-1 px-4 pb-16 pt-2 sm:px-6">
-        <Suspense fallback={<ListSkeleton />}>
-          <List searchParams={searchParams} />
-        </Suspense>
+        <SkeletonSwap skeleton={<ReservationListSkeleton admin />}>
+          <Suspense fallback={null}>
+            <Reveal>
+              <List searchParams={searchParams} />
+            </Reveal>
+          </Suspense>
+        </SkeletonSwap>
       </main>
     </PageShell>
   );
@@ -54,17 +62,25 @@ async function List({
 
   // Only an admin can read every row; row-level security enforces it.
   const supabase = await getSupabaseAuth();
-  const { data, error } = supabase
-    ? await supabase
-        .from("reservations")
-        .select(
-          "code, travel_date, trip_type, depart_time, arrive_time, return_time, province, destination, status, reject_reason, requester_name, department, phone, passengers, note, created_at",
-        )
-        .order("travel_date", { ascending: true })
-        .order("depart_time", { ascending: true })
-        .limit(500)
-    : { data: null, error: null };
+  if (!supabase) return <Notice title="เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง" />;
+  const [{ data, error }, vehicles, drivers] = await Promise.all([
+    supabase
+      .from("reservations")
+      .select(
+        "code, group_id, travel_date, trip_type, depart_time, arrive_time, return_time, province, destination, status, reject_reason, requester_name, department, phone, passengers, note, created_at, vehicle_id, driver_id",
+      )
+      .order("travel_date", { ascending: true })
+      .order("depart_time", { ascending: true })
+      .limit(500),
+    supabase
+      .from("vehicles")
+      .select("id, plate, description, active")
+      .order("plate"),
+    supabase.from("drivers").select("id, name, phone, active").order("name"),
+  ]);
   if (error) console.error("admin reservations failed", error);
+  if (vehicles.error) console.error("vehicles failed", vehicles.error);
+  if (drivers.error) console.error("drivers failed", drivers.error);
   if (!data) {
     return <Notice title="เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง" />;
   }
@@ -74,6 +90,10 @@ async function List({
       items={data as AdminReservation[]}
       initialFilter={filter}
       today={bangkokToday()}
+      fleet={{
+        vehicles: (vehicles.data ?? []) as Vehicle[],
+        drivers: (drivers.data ?? []) as Driver[],
+      }}
     />
   );
 }
@@ -83,24 +103,6 @@ function Notice({ title, hint }: { title: string; hint?: string }) {
     <div className="animate-fade-up rounded-2xl border border-dashed border-line-strong px-6 py-12 text-center">
       <h3 className="text-ink">{title}</h3>
       {hint && <p className="mt-1 text-ink-muted">{hint}</p>}
-    </div>
-  );
-}
-
-function ListSkeleton() {
-  return (
-    <div className="space-y-3" aria-hidden>
-      <div className="skeleton h-14 rounded-xl" />
-      {[1, 2].map((i) => (
-        <div key={i} className="card space-y-3 rounded-2xl p-5">
-          <div className="flex justify-between">
-            <div className="skeleton h-5 w-24 rounded" />
-            <div className="skeleton h-6 w-24 rounded-full" />
-          </div>
-          <div className="skeleton h-6 w-1/2 rounded" />
-          <div className="skeleton h-4 w-3/4 rounded" />
-        </div>
-      ))}
     </div>
   );
 }

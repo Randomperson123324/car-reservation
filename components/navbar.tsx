@@ -71,9 +71,7 @@ function UserActions({
   }
 
   return (
-    <div
-      className={mobile ? "flex flex-col gap-2" : "flex items-center gap-3"}
-    >
+    <div className={mobile ? "flex flex-col gap-2" : "flex items-center gap-3"}>
       <div
         className={`items-center gap-2 rounded-lg border border-line bg-surface-muted px-3 py-1.5 ${
           mobile ? "flex" : "hidden xl:flex"
@@ -123,8 +121,11 @@ function NavbarView({
   const solid = scrolled || menuOpen;
 
   return (
-    <nav
-      className={`fixed inset-x-0 top-0 z-50 border-b transition-all duration-300 ${
+    // A layout root, since the bar is fixed: the links inside are measured
+    // against it, not the page, so scrolling doesn't read as them moving.
+    <motion.nav
+      layoutRoot
+      className={`fixed inset-x-0 top-0 z-50 border-b transition-[background-color,border-color,box-shadow] duration-300 ${
         solid
           ? "border-line bg-surface/95 shadow-card backdrop-blur-sm"
           : "border-transparent bg-transparent"
@@ -150,7 +151,7 @@ function NavbarView({
               label={label}
               icon={icon}
               iconSize={21}
-              className={`flex items-center rounded-btn border px-3 py-2.5 font-display text-lg font-semibold transition-all ${
+              className={`flex items-center rounded-btn border px-3 py-2.5 font-display text-lg font-semibold transition-colors ${
                 pathname === href
                   ? "border-brand-200 bg-brand-50 text-brand-700"
                   : "border-transparent text-ink-muted hover:bg-surface-hover hover:text-ink"
@@ -219,6 +220,6 @@ function NavbarView({
           </motion.div>
         )}
       </AnimatePresence>
-    </nav>
+    </motion.nav>
   );
 }

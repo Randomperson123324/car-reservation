@@ -59,29 +59,6 @@
   }
 }
 
-/* Lets the rainbow gradients turn smoothly instead of jumping. */
-@property --rainbow-angle {
-  syntax: "<angle>";
-  initial-value: 0deg;
-  inherits: false;
-}
-
-@keyframes rainbow-spin {
-  to {
-    --rainbow-angle: 360deg;
-  }
-}
-
-@keyframes rainbow-shine {
-  0% {
-    transform: translateX(-120%);
-  }
-  35%,
-  100% {
-    transform: translateX(120%);
-  }
-}
-
 @layer base {
   html {
     color-scheme: light;
@@ -177,54 +154,6 @@
   }
   .btn-ghost {
     @apply text-ink-muted hover:bg-surface-hover hover:text-ink;
-  }
-
-  /* The admin's button: a turning red border with a hint of purple with a light sweeping
-     across now and then. */
-  .rainbow-gradient {
-    background: conic-gradient(
-      from var(--rainbow-angle),
-      #dc2626,
-      #ef4444,
-      #e11d48,
-      #b91c4a,
-      #9d2a7a,
-      #c8102e,
-      #dc2626
-    );
-    animation: rainbow-spin 4s linear infinite;
-  }
-  .btn-rainbow {
-    @apply relative overflow-hidden text-ink hover:-translate-y-px;
-    border: 2px solid transparent;
-    background:
-      linear-gradient(var(--color-surface), var(--color-surface)) padding-box,
-      conic-gradient(
-          from var(--rainbow-angle),
-          #dc2626,
-          #ef4444,
-          #e11d48,
-          #b91c4a,
-          #9d2a7a,
-          #c8102e,
-          #dc2626
-        )
-        border-box;
-    animation: rainbow-spin 4s linear infinite;
-  }
-  .btn-rainbow::after {
-    content: "";
-    position: absolute;
-    inset: 0;
-    pointer-events: none;
-    background: linear-gradient(
-      110deg,
-      transparent 30%,
-      rgb(255 255 255 / 0.85) 50%,
-      transparent 70%
-    );
-    transform: translateX(-120%);
-    animation: rainbow-shine 3.5s ease-in-out 1.2s infinite;
   }
 
   /* Loading skeleton — a muted block with a light band sweeping across it. */
